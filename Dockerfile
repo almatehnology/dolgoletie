@@ -30,9 +30,6 @@ COPY --from=build /app/.next/static ./.next/static
 # (@prisma/config, effect и пр.), без которых `prisma migrate deploy` падает.
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/prisma ./prisma
-# Скрипты админки (npm run set-password) и исходный package.json
-# с определениями npm scripts — standalone их не включает.
-COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/package.json ./package.json
 # Шрифты для PDF — используются server-side через абсолютный путь от process.cwd().
 COPY --from=build /app/assets ./assets

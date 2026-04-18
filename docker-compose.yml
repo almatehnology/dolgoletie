@@ -19,3 +19,5 @@ services:
       - ./uploads:/app/uploads
       - ./.env:/app/.env
     restart: unless-stopped
+
+

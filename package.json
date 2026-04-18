@@ -11,7 +11,6 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
-    "set-password": "node scripts/set-password.mjs",
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
@@ -21,12 +20,10 @@
     "@reduxjs/toolkit": "^2.5.0",
     "@types/pdfkit": "^0.13.9",
     "archiver": "^7.0.1",
-    "bcryptjs": "^2.4.3",
     "clsx": "^2.1.1",
     "file-type": "^19.6.0",
     "framer-motion": "^11.15.0",
     "iron-session": "^8.0.4",
-    "lru-cache": "^11.0.2",
     "next": "^15.1.4",
     "pdfkit": "^0.15.2",
     "pino": "^9.5.0",
@@ -41,7 +38,6 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
     "@types/archiver": "^6.0.3",
-    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",

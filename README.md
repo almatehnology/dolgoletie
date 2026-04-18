@@ -20,7 +20,7 @@ cp .env.example .env
 echo "SESSION_SECRET=$(openssl rand -hex 32)" >> .env
 
 docker compose build
-docker compose run --rm app npm run set-password   # задать пароль (запишет в .env)
+# укажите пароль в .env: APP_PASSWORD=<ваш-пароль>
 docker compose up -d
 ```
 
@@ -35,7 +35,7 @@ docker compose up -d
 ```bash
 cp .env.example .env
 npm install
-npm run set-password          # задать пароль
+# отредактируйте .env: APP_PASSWORD=<ваш-пароль>
 npx prisma migrate deploy     # применить миграции (включая FTS5)
 npm run build
 npm start                     # http://localhost:3000
@@ -43,9 +43,8 @@ npm start                     # http://localhost:3000
 
 Для разработки: `npm run dev`.
 
-> ⚠ `APP_PASSWORD_HASH` в `.env` должен быть с экранированными `$`, иначе Next.js
-> интерпретирует их как подстановку переменных. Скрипт `set-password` делает это
-> автоматически.
+> Пароль хранится в `.env` в открытом виде — это локальное приложение без
+> доступа в интернет, отдельное хеширование не нужно.
 
 ## Основные разделы
 
@@ -81,7 +80,6 @@ Dockerfile, docker-compose.yml, PLAN.md, README.md
 |---|---|
 | `npm run dev` | Dev-сервер |
 | `npm run build` + `npm start` | Production-сборка и запуск |
-| `npm run set-password` | Задать/обновить пароль |
 | `npm run prisma:migrate` | Создать новую миграцию (dev) |
 | `npm run prisma:deploy` | Применить миграции (prod) |
 | `npm run prisma:studio` | GUI к SQLite |

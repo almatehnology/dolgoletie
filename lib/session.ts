@@ -18,7 +18,10 @@ export const sessionOptions: SessionOptions = {
   cookieOptions: {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    // Локально приложение ходит по HTTP. Secure-кука отбрасывается браузером
+    // на http-соединении → бесконечный редирект. Включаем только если явно
+    // указан COOKIE_SECURE=true (например, за HTTPS-прокси).
+    secure: process.env.COOKIE_SECURE === 'true',
     path: '/',
     maxAge: 60 * 60 * 24 * 30,
   },
