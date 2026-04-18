@@ -1,8 +1,8 @@
 import bcrypt from 'bcryptjs';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
+import { createInterface } from 'node:readline/promises';
 
 async function main() {
   const envPath = resolve(process.cwd(), '.env');
@@ -23,7 +23,7 @@ async function main() {
   const hash = await bcrypt.hash(password, 12);
 
   let env = existsSync(envPath) ? readFileSync(envPath, 'utf8') : '';
-  // Next.js интерполирует $VAR в .env ДАЖЕ внутри кавычек (кавычки снимаются
+  // Next.js интерполирует $VAR в .env даже внутри кавычек (кавычки снимаются
   // до интерполяции). Только \$ экранирует, поэтому каждый $ в bcrypt-хеше
   // превращаем в \$.
   const escapedHash = hash.replace(/\$/g, '\\$');

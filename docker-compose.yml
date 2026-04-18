@@ -15,4 +15,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
+      # Монтируем .env: npm run set-password пишет в него хеш пароля,
+      # без этого изменения остались бы внутри контейнера и не попадали в host.
+      - ./.env:/app/.env
     restart: unless-stopped

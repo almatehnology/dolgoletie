@@ -23,20 +23,25 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-RUN addgroup -S app && adduser -S app -G app
 COPY --from=build /app/public ./public
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=build /app/node_modules/prisma ./node_modules/prisma
+COPY --from=build /app/node_modules/bcryptjs ./node_modules/bcryptjs
 COPY --from=build /app/prisma ./prisma
+# Скрипты админки (npm run set-password) и исходный package.json
+# с определениями npm scripts — standalone их не включает.
+COPY --from=build /app/scripts ./scripts
+COPY --from=build /app/package.json ./package.json
 # Шрифты для PDF — используются server-side через абсолютный путь от process.cwd().
 COPY --from=build /app/assets ./assets
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh && \
-    mkdir -p /app/data /app/uploads && chown -R app:app /app
+RUN chmod +x /usr/local/bin/entrypoint.sh && mkdir -p /app/data /app/uploads
 
-USER app
+# Локальное приложение, запускаем как root: иначе bind-mount .env с хоста
+# будет недоступен для записи (npm run set-password).
 EXPOSE 3000
 ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/entrypoint.sh"]
 CMD ["node", "server.js"]

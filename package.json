@@ -11,7 +11,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
-    "set-password": "tsx scripts/set-password.ts",
+    "set-password": "node scripts/set-password.mjs",
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
