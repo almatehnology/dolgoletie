@@ -14,6 +14,7 @@ interface Props {
   submitting?: boolean;
   fieldErrors?: Record<string, string[]>;
   onSubmit: (data: EventInput) => Promise<unknown>;
+  hideExcursions?: boolean;
 }
 
 function toInputDate(v?: string): string {
@@ -21,7 +22,7 @@ function toInputDate(v?: string): string {
   return v.length >= 10 ? v.slice(0, 10) : v;
 }
 
-export function EventForm({ initial, mode, submitting, fieldErrors, onSubmit }: Props) {
+export function EventForm({ initial, mode, submitting, fieldErrors, onSubmit, hideExcursions }: Props) {
   const router = useRouter();
   const [title, setTitle] = useState(initial?.title ?? '');
   const [startDate, setStartDate] = useState(toInputDate(initial?.startDate));
@@ -162,36 +163,38 @@ export function EventForm({ initial, mode, submitting, fieldErrors, onSubmit }: 
         ) : null}
       </Card>
 
-      <Card>
-        <Card.Header className="flex items-center justify-between p-6 pb-4">
-          <Card.Title>Экскурсии</Card.Title>
-          <Button type="button" variant="secondary" size="sm" onPress={addExcursion}>
-            + Добавить
-          </Button>
-        </Card.Header>
-        <Card.Content className="flex flex-col gap-3 p-6 pt-2">
-          {excursions.length === 0 ? (
-            <p className="text-sm text-default-500">Экскурсий нет.</p>
-          ) : (
-            excursions.map((ex, idx) => (
-              <div key={idx} className="grid gap-3 md:grid-cols-[1fr_10rem_auto]">
-                <Field label="Название" value={ex.name} onChange={(v) => updateExcursion(idx, { name: v })} />
-                <Field
-                  label="Стоимость"
-                  value={ex.cost ?? ''}
-                  onChange={(v) => updateExcursion(idx, { cost: v })}
-                  inputMode="decimal"
-                />
-                <div className="flex items-end pb-0.5">
-                  <Button type="button" size="sm" variant="ghost" onPress={() => removeExcursion(idx)}>
-                    Удалить
-                  </Button>
+      {hideExcursions ? null : (
+        <Card>
+          <Card.Header className="flex items-center justify-between p-6 pb-4">
+            <Card.Title>Экскурсии</Card.Title>
+            <Button type="button" variant="secondary" size="sm" onPress={addExcursion}>
+              + Добавить
+            </Button>
+          </Card.Header>
+          <Card.Content className="flex flex-col gap-3 p-6 pt-2">
+            {excursions.length === 0 ? (
+              <p className="text-sm text-default-500">Экскурсий нет.</p>
+            ) : (
+              excursions.map((ex, idx) => (
+                <div key={idx} className="grid gap-3 md:grid-cols-[1fr_10rem_auto]">
+                  <Field label="Название" value={ex.name} onChange={(v) => updateExcursion(idx, { name: v })} />
+                  <Field
+                    label="Стоимость"
+                    value={ex.cost ?? ''}
+                    onChange={(v) => updateExcursion(idx, { cost: v })}
+                    inputMode="decimal"
+                  />
+                  <div className="flex items-end pb-0.5">
+                    <Button type="button" size="sm" variant="ghost" onPress={() => removeExcursion(idx)}>
+                      Удалить
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ))
-          )}
-        </Card.Content>
-      </Card>
+              ))
+            )}
+          </Card.Content>
+        </Card>
+      )}
 
       <div className="flex gap-2">
         <Button

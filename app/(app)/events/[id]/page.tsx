@@ -1,11 +1,13 @@
 'use client';
 
-import { Button, Card, Spinner, Tabs } from '@heroui/react';
+import { Button, Card, Spinner } from '@heroui/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { use, useState } from 'react';
 import { EventForm } from '@/components/events/event-form';
+import { EventExcursionsEditor } from '@/components/events/event-excursions-editor';
 import { EventParticipantsBlock } from '@/components/events/event-participants';
+import { TabNav } from '@/components/tab-nav';
 import {
   useDeleteEventMutation,
   useGetEventQuery,
@@ -46,14 +48,6 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
 
   return (
     <div className="flex flex-col gap-6">
-      <nav className="text-sm text-default-500">
-        <Link href="/events" className="hover:underline">
-          Мероприятия
-        </Link>
-        <span> / </span>
-        <span>{data.title}</span>
-      </nav>
-
       <header className="sticky top-14 z-20 -mx-5 flex flex-wrap items-center justify-between gap-3 border-b border-default-200 bg-background/95 px-5 py-3 backdrop-blur">
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-2xl font-semibold">{data.title}</h1>
@@ -100,73 +94,90 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
 
       {generalError ? <p className="text-sm text-danger">{generalError}</p> : null}
 
-      <Tabs defaultSelectedKey="details">
-        <Tabs.List className="flex gap-1 border-b border-default-200">
-          <Tabs.Tab
-            id="details"
-            className="cursor-pointer border-b-2 border-transparent px-4 py-2 text-sm text-default-500 outline-none transition data-[selected=true]:border-primary data-[selected=true]:text-foreground data-[hovered=true]:text-foreground"
-          >
-            Основные данные
-          </Tabs.Tab>
-          <Tabs.Tab
-            id="participants"
-            className="cursor-pointer border-b-2 border-transparent px-4 py-2 text-sm text-default-500 outline-none transition data-[selected=true]:border-primary data-[selected=true]:text-foreground data-[hovered=true]:text-foreground"
-          >
-            Участники ({data.participations.length})
-          </Tabs.Tab>
-        </Tabs.List>
-
-        <Tabs.Panel id="details" className="pt-6 outline-none">
-          <EventForm
-            mode="edit"
-            submitting={saving}
-            fieldErrors={errors}
-            initial={{
-              title: data.title,
-              startDate: data.startDate,
-              endDate: data.endDate,
-              location: data.location,
-              cost: data.cost ?? undefined,
-              currency: data.currency,
-              program: data.program ?? undefined,
-              isOutbound: data.isOutbound,
-              accommodationPlace: data.accommodationPlace ?? undefined,
-              accommodationOrder: data.accommodationOrder ?? undefined,
-              mealType: data.mealType ?? undefined,
-              staysFrom: data.staysFrom ?? undefined,
-              staysTo: data.staysTo ?? undefined,
-              accommodationCost: data.accommodationCost ?? undefined,
-              transportType: data.transportType ?? undefined,
-              transportInfo: data.transportInfo ?? undefined,
-              transportCost: data.transportCost ?? undefined,
-              excursions: data.excursions.map((ex) => ({ id: ex.id, name: ex.name, cost: ex.cost ?? '' })),
-            }}
-            onSubmit={async (input) => {
-              setErrors({});
-              setGeneralError(null);
-              try {
-                await updateEvent({ id, data: input }).unwrap();
-              } catch (err) {
-                const e = err as { data?: { error?: { message?: string; fields?: Record<string, string[]> } } };
-                setErrors(e.data?.error?.fields ?? {});
-                setGeneralError(e.data?.error?.message ?? 'Не удалось сохранить');
-              }
-            }}
-          />
-        </Tabs.Panel>
-
-        <Tabs.Panel id="participants" className="pt-6 outline-none">
-          <Card>
-            <Card.Content className="p-6">
-              <EventParticipantsBlock
+      <TabNav
+        items={[
+          {
+            id: 'details',
+            label: 'Основные данные',
+            content: (
+              <EventForm
+                mode="edit"
+                submitting={saving}
+                fieldErrors={errors}
+                hideExcursions
+                initial={{
+                  title: data.title,
+                  startDate: data.startDate,
+                  endDate: data.endDate,
+                  location: data.location,
+                  cost: data.cost ?? undefined,
+                  currency: data.currency,
+                  program: data.program ?? undefined,
+                  isOutbound: data.isOutbound,
+                  accommodationPlace: data.accommodationPlace ?? undefined,
+                  accommodationOrder: data.accommodationOrder ?? undefined,
+                  mealType: data.mealType ?? undefined,
+                  staysFrom: data.staysFrom ?? undefined,
+                  staysTo: data.staysTo ?? undefined,
+                  accommodationCost: data.accommodationCost ?? undefined,
+                  transportType: data.transportType ?? undefined,
+                  transportInfo: data.transportInfo ?? undefined,
+                  transportCost: data.transportCost ?? undefined,
+                  excursions: data.excursions.map((ex) => ({
+                    id: ex.id,
+                    name: ex.name,
+                    cost: ex.cost ?? '',
+                  })),
+                }}
+                onSubmit={async (input) => {
+                  setErrors({});
+                  setGeneralError(null);
+                  try {
+                    // Исключаем excursions — они сохраняются в своей вкладке.
+                    const { excursions: _unused, ...rest } = input;
+                    void _unused;
+                    await updateEvent({ id, data: rest }).unwrap();
+                  } catch (err) {
+                    const e = err as {
+                      data?: { error?: { message?: string; fields?: Record<string, string[]> } };
+                    };
+                    setErrors(e.data?.error?.fields ?? {});
+                    setGeneralError(e.data?.error?.message ?? 'Не удалось сохранить');
+                  }
+                }}
+              />
+            ),
+          },
+          {
+            id: 'excursions',
+            label: 'Экскурсии',
+            badge: data.excursions.length,
+            content: (
+              <EventExcursionsEditor
                 eventId={id}
                 currency={data.currency}
-                participations={data.participations}
+                excursions={data.excursions}
               />
-            </Card.Content>
-          </Card>
-        </Tabs.Panel>
-      </Tabs>
+            ),
+          },
+          {
+            id: 'participants',
+            label: 'Участники',
+            badge: data.participations.length,
+            content: (
+              <Card>
+                <Card.Content className="p-6">
+                  <EventParticipantsBlock
+                    eventId={id}
+                    currency={data.currency}
+                    participations={data.participations}
+                  />
+                </Card.Content>
+              </Card>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

@@ -26,6 +26,9 @@ function initDoc({ title, subtitle }: InitOptions) {
     size: 'A4',
     margins: { top: 48, bottom: 48, left: 48, right: 48 },
     info: { Title: title, Creator: 'Долголетие', Producer: 'Долголетие' },
+    // bufferPages: позволяет вернуться к уже созданным страницам (для футера
+    // с нумерацией). Без этого switchToPage создаёт лишние пустые страницы.
+    bufferPages: true,
   });
   doc.registerFont('Regular', FONT_REGULAR);
   doc.registerFont('Bold', FONT_BOLD);
@@ -72,42 +75,31 @@ function sectionHeader(doc: PDFKit.PDFDocument, title: string) {
 }
 
 /**
- * Рисует список ключ-значение в две колонки: `label` слева серым, `value` справа чёрным.
- * Разрыв страницы — автоматический.
+ * Рисует список ключ-значение одной колонкой, слева направо:
+ * label (серый, 9pt) над value (чёрный, 11pt). Всё выровнено по левому краю.
  */
 function kvList(
   doc: PDFKit.PDFDocument,
   items: Array<[label: string, value: string | null | undefined]>,
-  opts: { labelWidth?: number } = {},
 ) {
   const filled = items.filter(([, v]) => v !== null && v !== undefined && v !== '');
   if (filled.length === 0) return;
 
-  const labelWidth = opts.labelWidth ?? 170;
-  const contentWidth =
-    doc.page.width - doc.page.margins.left - doc.page.margins.right - labelWidth - 8;
-  const xLabel = doc.page.margins.left;
-  const xValue = xLabel + labelWidth + 8;
-  const lineGap = 3;
+  const x = doc.page.margins.left;
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
 
   for (const [label, value] of filled) {
-    const y = doc.y;
     doc
       .font('Regular')
-      .fontSize(10)
+      .fontSize(9)
       .fillColor(COLORS.muted)
-      .text(label, xLabel, y, { width: labelWidth, lineGap });
-
-    const yAfterLabel = doc.y;
+      .text(label, x, doc.y, { width, lineGap: 1, characterSpacing: 0.3 });
     doc
       .font('Regular')
-      .fontSize(10.5)
+      .fontSize(11)
       .fillColor(COLORS.text)
-      .text(String(value), xValue, y, { width: contentWidth, lineGap });
-
-    // Переходим на максимально нижнюю точку
-    const yNext = Math.max(yAfterLabel, doc.y);
-    doc.y = yNext + 2;
+      .text(String(value), x, doc.y, { width, lineGap: 2 });
+    doc.moveDown(0.35);
   }
 }
 
@@ -115,9 +107,11 @@ function footer(doc: PDFKit.PDFDocument) {
   const range = doc.bufferedPageRange();
   for (let i = range.start; i < range.start + range.count; i++) {
     doc.switchToPage(i);
-    const bottom = doc.page.height - doc.page.margins.bottom + 18;
     const left = doc.page.margins.left;
     const right = doc.page.width - doc.page.margins.right;
+    // Пишем футер внутри нижнего margin-блока. lineBreak + height предотвращают
+    // авто-переход PDFKit на новую страницу при записи вблизи края.
+    const y = doc.page.height - doc.page.margins.bottom + 12;
     doc
       .font('Regular')
       .fontSize(8)
@@ -125,12 +119,14 @@ function footer(doc: PDFKit.PDFDocument) {
       .text(
         `Сформировано ${new Date().toLocaleString('ru-RU')} · Долголетие`,
         left,
-        bottom,
-        { width: right - left, align: 'left' },
+        y,
+        { width: right - left, align: 'left', lineBreak: false, height: 14 },
       )
-      .text(`${i - range.start + 1} / ${range.count}`, left, bottom, {
+      .text(`${i - range.start + 1} / ${range.count}`, left, y, {
         width: right - left,
         align: 'right',
+        lineBreak: false,
+        height: 14,
       });
   }
 }
@@ -141,6 +137,9 @@ function bufferDoc(doc: PDFKit.PDFDocument): Promise<Buffer> {
     doc.on('data', (c: Buffer) => chunks.push(c));
     doc.on('end', () => resolveP(Buffer.concat(chunks)));
     doc.on('error', reject);
+    // flushPages: сбрасывает буфер страниц перед закрытием — без этого
+    // страницы, накопленные в bufferPages, остаются пустыми.
+    doc.flushPages();
     doc.end();
   });
 }

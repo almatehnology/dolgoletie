@@ -106,7 +106,7 @@ export function AddPersonToEventDialog({ open, onOpenChange, personId }: Props) 
             ))}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-3">
           <Field label="Предоплата" value={prepaid} onChange={setPrepaid} placeholder="0.00" inputMode="decimal" />
           <Field label="Итого" value={totalDue} onChange={setTotalDue} placeholder="0.00" inputMode="decimal" />
         </div>

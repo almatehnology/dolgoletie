@@ -1,12 +1,13 @@
 'use client';
 
-import { Button, Card, Spinner, Tabs } from '@heroui/react';
+import { Button, Card, Spinner } from '@heroui/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { use, useState } from 'react';
 import { PersonForm } from '@/components/people/person-form';
 import { PassportScansBlock } from '@/components/people/passport-scans';
 import { PersonParticipationsBlock } from '@/components/people/person-participations';
+import { TabNav } from '@/components/tab-nav';
 import {
   useDeletePersonMutation,
   useGetPersonQuery,
@@ -46,16 +47,6 @@ export default function PersonDetailPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="flex flex-col gap-6">
-      <nav className="text-sm text-default-500">
-        <Link href="/people" className="hover:underline">
-          Люди
-        </Link>
-        <span> / </span>
-        <span>
-          {data.lastName} {data.firstName} {data.middleName ?? ''}
-        </span>
-      </nav>
-
       <header className="sticky top-14 z-20 -mx-5 flex flex-wrap items-center justify-between gap-3 border-b border-default-200 bg-background/95 px-5 py-3 backdrop-blur">
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-2xl font-semibold">
@@ -101,81 +92,78 @@ export default function PersonDetailPage({ params }: { params: Promise<{ id: str
 
       {generalError ? <p className="text-sm text-danger">{generalError}</p> : null}
 
-      <Tabs defaultSelectedKey="details">
-        <Tabs.List className="flex gap-1 border-b border-default-200">
-          <Tabs.Tab
-            id="details"
-            className="cursor-pointer border-b-2 border-transparent px-4 py-2 text-sm text-default-500 outline-none transition data-[selected=true]:border-primary data-[selected=true]:text-foreground data-[hovered=true]:text-foreground"
-          >
-            Основные данные
-          </Tabs.Tab>
-          <Tabs.Tab
-            id="events"
-            className="cursor-pointer border-b-2 border-transparent px-4 py-2 text-sm text-default-500 outline-none transition data-[selected=true]:border-primary data-[selected=true]:text-foreground data-[hovered=true]:text-foreground"
-          >
-            Мероприятия ({data.participations.length})
-          </Tabs.Tab>
-        </Tabs.List>
+      <TabNav
+        items={[
+          {
+            id: 'details',
+            label: 'Основные данные',
+            content: (
+              <div className="flex flex-col gap-6">
+                <PersonForm
+                  mode="edit"
+                  submitting={saving}
+                  fieldErrors={errors}
+                  initial={{
+                    lastName: data.lastName,
+                    firstName: data.firstName,
+                    middleName: data.middleName ?? undefined,
+                    phone: data.phone ?? undefined,
+                    gender: data.gender ?? undefined,
+                    birthPlace: data.birthPlace ?? undefined,
+                    registrationAddress: data.registrationAddress ?? undefined,
+                    passportNumber: data.passportNumber ?? undefined,
+                    passportIssuedBy: data.passportIssuedBy ?? undefined,
+                    passportIssuedAt: data.passportIssuedAt ?? undefined,
+                    passportExpiresAt: data.passportExpiresAt ?? undefined,
+                    passportDepartmentCode: data.passportDepartmentCode ?? undefined,
+                    passportDetails: data.passportDetails ?? undefined,
+                    notes: data.notes ?? undefined,
+                  }}
+                  onSubmit={async (input) => {
+                    setErrors({});
+                    setGeneralError(null);
+                    try {
+                      await updatePerson({ id, data: input }).unwrap();
+                    } catch (err) {
+                      const e = err as {
+                        data?: { error?: { message?: string; fields?: Record<string, string[]> } };
+                      };
+                      setErrors(e.data?.error?.fields ?? {});
+                      setGeneralError(e.data?.error?.message ?? 'Не удалось сохранить');
+                    }
+                  }}
+                />
 
-        <Tabs.Panel id="details" className="pt-6 outline-none">
-          <div className="flex flex-col gap-6">
-            <PersonForm
-              mode="edit"
-              submitting={saving}
-              fieldErrors={errors}
-              initial={{
-                lastName: data.lastName,
-                firstName: data.firstName,
-                middleName: data.middleName ?? undefined,
-                phone: data.phone ?? undefined,
-                gender: data.gender ?? undefined,
-                birthPlace: data.birthPlace ?? undefined,
-                registrationAddress: data.registrationAddress ?? undefined,
-                passportNumber: data.passportNumber ?? undefined,
-                passportIssuedBy: data.passportIssuedBy ?? undefined,
-                passportIssuedAt: data.passportIssuedAt ?? undefined,
-                passportExpiresAt: data.passportExpiresAt ?? undefined,
-                passportDepartmentCode: data.passportDepartmentCode ?? undefined,
-                passportDetails: data.passportDetails ?? undefined,
-                notes: data.notes ?? undefined,
-              }}
-              onSubmit={async (input) => {
-                setErrors({});
-                setGeneralError(null);
-                try {
-                  await updatePerson({ id, data: input }).unwrap();
-                } catch (err) {
-                  const e = err as { data?: { error?: { message?: string; fields?: Record<string, string[]> } } };
-                  setErrors(e.data?.error?.fields ?? {});
-                  setGeneralError(e.data?.error?.message ?? 'Не удалось сохранить');
-                }
-              }}
-            />
-
-            <Card>
-              <Card.Header>
-                <Card.Title>Документы</Card.Title>
-                <Card.Description>Сканы паспорта скрыты по умолчанию.</Card.Description>
-              </Card.Header>
-              <Card.Content className="p-6">
-                <PassportScansBlock personId={id} scans={data.scans} />
-              </Card.Content>
-            </Card>
-          </div>
-        </Tabs.Panel>
-
-        <Tabs.Panel id="events" className="pt-6 outline-none">
-          <Card>
-            <Card.Content className="p-6">
-              <PersonParticipationsBlock
-                personId={id}
-                participations={data.participations}
-                currencyDefault="RUB"
-              />
-            </Card.Content>
-          </Card>
-        </Tabs.Panel>
-      </Tabs>
+                <Card>
+                  <Card.Header>
+                    <Card.Title>Документы</Card.Title>
+                    <Card.Description>Сканы паспорта скрыты по умолчанию.</Card.Description>
+                  </Card.Header>
+                  <Card.Content className="p-6">
+                    <PassportScansBlock personId={id} scans={data.scans} />
+                  </Card.Content>
+                </Card>
+              </div>
+            ),
+          },
+          {
+            id: 'events',
+            label: 'Мероприятия',
+            badge: data.participations.length,
+            content: (
+              <Card>
+                <Card.Content className="p-6">
+                  <PersonParticipationsBlock
+                    personId={id}
+                    participations={data.participations}
+                    currencyDefault="RUB"
+                  />
+                </Card.Content>
+              </Card>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

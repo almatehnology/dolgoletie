@@ -1,4 +1,4 @@
-# TravelDataBase — план MVP
+# Долголетие (dolgoletie) — план MVP
 
 Информационный портал с локальной базой для учёта физлиц и мероприятий.
 
@@ -34,7 +34,7 @@
 ## 2. Структура проекта
 
 ```
-TravelDataBase/
+Долголетие (dolgoletie)/
 ├─ app/
 │  ├─ (auth)/login/page.tsx
 │  ├─ (app)/

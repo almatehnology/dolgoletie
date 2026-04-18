@@ -6,7 +6,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
       <AppNavbar />
-      <main className="w-full flex-1 px-5 py-5">{children}</main>
+        <main className="w-full flex-1 px-4 ">{children}</main>
       <SearchModal />
     </div>
   );

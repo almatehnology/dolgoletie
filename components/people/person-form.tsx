@@ -81,7 +81,7 @@ export function PersonForm({ initial, mode, submitting, fieldErrors, onSubmit, o
             options={GENDER_OPTIONS}
             error={pickError('gender')}
           />
-          <Field label="Место рождения" value={birthPlace} onChange={setBirthPlace} error={pickError('birthPlace')} placeholder="Город / регион" className="md:col-span-3" />
+          <Field label="Место рождения" value={birthPlace} onChange={setBirthPlace} error={pickError('birthPlace')} placeholder="Город / регион" />
         </Card.Content>
       </Card>
 
@@ -90,11 +90,17 @@ export function PersonForm({ initial, mode, submitting, fieldErrors, onSubmit, o
           <Card.Title>Паспорт</Card.Title>
           <Card.Description>Сканы загружаются ниже, после сохранения человека.</Card.Description>
         </Card.Header>
-        <Card.Content className="grid gap-x-4 gap-y-5 p-6 md:grid-cols-2">
+        <Card.Content className="grid gap-x-4 gap-y-5 p-6 md:grid-cols-3">
           <Field label="Серия и номер" value={passportNumber} onChange={setPassportNumber} error={pickError('passportNumber')} placeholder="0000 000000" />
-          <Field label="Кем выдан" value={passportIssuedBy} onChange={setPassportIssuedBy} error={pickError('passportIssuedBy')} />
           <Field label="Дата выдачи" type="date" value={passportIssuedAt} onChange={setPassportIssuedAt} error={pickError('passportIssuedAt')} />
           <Field label="Срок действия" type="date" value={passportExpiresAt} onChange={setPassportExpiresAt} error={pickError('passportExpiresAt')} />
+          <Field
+            label="Кем выдан"
+            value={passportIssuedBy}
+            onChange={setPassportIssuedBy}
+            error={pickError('passportIssuedBy')}
+            className="md:col-span-2"
+          />
           <MaskedField
             label="Код подразделения"
             value={passportDepartmentCode}
@@ -103,16 +109,22 @@ export function PersonForm({ initial, mode, submitting, fieldErrors, onSubmit, o
             placeholder="000-000"
             inputMode="numeric"
             maxLength={7}
-            helper="Ровно 6 цифр в формате 000-000"
+            helper="6 цифр в формате 000-000"
             error={pickError('passportDepartmentCode')}
           />
-          <Field label="Адрес по прописке" value={registrationAddress} onChange={setRegistrationAddress} error={pickError('registrationAddress')} />
+          <Field
+            label="Адрес по прописке"
+            value={registrationAddress}
+            onChange={setRegistrationAddress}
+            error={pickError('registrationAddress')}
+            className="md:col-span-3"
+          />
           <TextAreaField
             label="Дополнительные реквизиты"
             value={passportDetails}
             onChange={setPassportDetails}
             placeholder="Иные сведения по документу"
-            className="md:col-span-2"
+            className="md:col-span-3"
             error={pickError('passportDetails')}
             rows={3}
           />

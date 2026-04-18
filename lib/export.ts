@@ -84,5 +84,5 @@ export async function buildExportZip(scope: ExportScope): Promise<{ stream: Node
   archive.finalize();
 
   const date = new Date().toISOString().slice(0, 10);
-  return { stream: pt, filename: `travel-database-${scope}-${date}.zip` };
+  return { stream: pt, filename: `dolgoletie-${scope}-${date}.zip` };
 }
