@@ -26,10 +26,9 @@ ENV HOSTNAME=0.0.0.0
 COPY --from=build /app/public ./public
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
-COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=build /app/node_modules/prisma ./node_modules/prisma
-COPY --from=build /app/node_modules/bcryptjs ./node_modules/bcryptjs
+# Полная папка node_modules из build-стадии — включает зависимости Prisma CLI
+# (@prisma/config, effect и пр.), без которых `prisma migrate deploy` падает.
+COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/prisma ./prisma
 # Скрипты админки (npm run set-password) и исходный package.json
 # с определениями npm scripts — standalone их не включает.
@@ -38,10 +37,12 @@ COPY --from=build /app/package.json ./package.json
 # Шрифты для PDF — используются server-side через абсолютный путь от process.cwd().
 COPY --from=build /app/assets ./assets
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+# Обёртка: загружает .env через @next/env (парсит \$ корректно) и запускает server.js.
+COPY docker/start.js ./start.js
 RUN chmod +x /usr/local/bin/entrypoint.sh && mkdir -p /app/data /app/uploads
 
 # Локальное приложение, запускаем как root: иначе bind-mount .env с хоста
 # будет недоступен для записи (npm run set-password).
 EXPOSE 3000
 ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/entrypoint.sh"]
-CMD ["node", "server.js"]
+CMD ["node", "start.js"]

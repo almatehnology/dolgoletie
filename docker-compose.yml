@@ -7,15 +7,15 @@ services:
     container_name: dolgoletie
     ports:
       - "3000:3000"
-    env_file:
-      - .env
+    # env_file НЕ используем: docker-compose парсит .env сам и воспринимает
+    # \$ в bcrypt-хеше как подстановку переменных. Вместо этого монтируем .env
+    # как файл-volume и загружаем его в start.js через @next/env.
     environment:
       DATABASE_URL: file:/app/data/data.db
       UPLOADS_DIR: /app/uploads
+      MAX_UPLOAD_MB: "10"
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
-      # Монтируем .env: npm run set-password пишет в него хеш пароля,
-      # без этого изменения остались бы внутри контейнера и не попадали в host.
       - ./.env:/app/.env
     restart: unless-stopped
