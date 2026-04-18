@@ -1,0 +1,122 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum PaymentStatus {
+  UNPAID
+  PREPAID
+  PAID
+}
+
+enum Currency {
+  RUB
+  USD
+}
+
+enum TransportType {
+  BUS
+  TRAIN
+  PLANE
+  OTHER
+}
+
+model Person {
+  id                     String          @id @default(cuid())
+  lastName               String
+  firstName              String
+  middleName             String?
+  phone                  String?
+  gender                 String?         // MALE | FEMALE | OTHER
+  birthPlace             String?
+  registrationAddress    String?
+  passportNumber         String?
+  passportIssuedBy       String?
+  passportIssuedAt       DateTime?
+  passportExpiresAt      DateTime?
+  passportDepartmentCode String?         // формат 000-000
+  passportDetails        String?
+  notes                  String?
+  scans                  PassportScan[]
+  participations         Participation[]
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  deletedAt              DateTime?
+
+  @@index([lastName, firstName])
+  @@index([passportNumber])
+}
+
+model PassportScan {
+  id         String   @id @default(cuid())
+  personId   String
+  person     Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  filename   String
+  storedPath String
+  thumbPath  String?
+  mimeType   String
+  sizeBytes  Int
+  uploadedAt DateTime @default(now())
+
+  @@index([personId])
+}
+
+model Event {
+  id                 String          @id @default(cuid())
+  title              String
+  startDate          DateTime
+  endDate            DateTime
+  location           String
+  cost               Decimal?
+  currency           Currency        @default(RUB)
+  program            String?
+  isOutbound         Boolean         @default(false)
+  accommodationPlace String?
+  accommodationOrder String?
+  mealType           String?
+  staysFrom          DateTime?
+  staysTo            DateTime?
+  accommodationCost  Decimal?
+  transportType      TransportType?
+  transportInfo      String?
+  transportCost      Decimal?
+  excursions         Excursion[]
+  participations     Participation[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  deletedAt          DateTime?
+
+  @@index([startDate, endDate])
+  @@index([title])
+}
+
+model Excursion {
+  id      String   @id @default(cuid())
+  eventId String
+  event   Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name    String
+  cost    Decimal?
+
+  @@index([eventId])
+}
+
+model Participation {
+  id            String        @id @default(cuid())
+  personId      String
+  eventId       String
+  person        Person        @relation(fields: [personId], references: [id], onDelete: Cascade)
+  event         Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  paymentStatus PaymentStatus @default(UNPAID)
+  prepaidAmount Decimal?
+  totalDue      Decimal?
+  notes         String?
+  createdAt     DateTime      @default(now())
+
+  @@unique([personId, eventId])
+  @@index([personId])
+  @@index([eventId])
+}

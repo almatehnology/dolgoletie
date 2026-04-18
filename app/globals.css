@@ -1,0 +1,65 @@
+@import "@heroui/styles";
+
+@source "../app/**/*.{ts,tsx}";
+@source "../components/**/*.{ts,tsx}";
+@source "../lib/**/*.{ts,tsx}";
+
+/* Добавляем недостающие в HeroUI v3 токены Tailwind v4:
+   шкала default-50..700, алиасы primary → accent, оттенки статусных цветов. */
+@theme {
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-foreground);
+
+  --color-default-50: oklch(0.985 0 0);
+  --color-default-100: oklch(0.97 0 0);
+  --color-default-200: oklch(0.92 0 0);
+  --color-default-300: oklch(0.87 0 0);
+  --color-default-400: oklch(0.71 0 0);
+  --color-default-500: oklch(0.55 0 0);
+  --color-default-600: oklch(0.43 0 0);
+  --color-default-700: oklch(0.33 0 0);
+  --color-default-800: oklch(0.25 0 0);
+
+  --color-success-100: oklch(0.95 0.06 150);
+  --color-success-700: oklch(0.45 0.15 150);
+  --color-warning-100: oklch(0.95 0.07 72);
+  --color-warning-700: oklch(0.47 0.15 72);
+  --color-danger-100: oklch(0.94 0.07 26);
+  --color-danger-700: oklch(0.44 0.19 26);
+}
+
+/* По умолчанию в HeroUI v3 у полей формы нет границы (--field-border: transparent),
+   поэтому они сливаются с поверхностями карточек. Задаём чёткую рамку. */
+@layer theme {
+  :root,
+  .light,
+  .default,
+  [data-theme="light"],
+  [data-theme="default"] {
+    --field-border-width: 1px;
+    --field-border: oklch(0.88 0.005 286.32);
+    --field-border-hover: oklch(0.78 0.005 286.32);
+    --field-border-focus: var(--accent);
+    --field-border-invalid: var(--danger);
+    --field-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  }
+  .dark,
+  [data-theme="dark"] {
+    --field-border-width: 1px;
+    --field-border: oklch(0.32 0.008 286.32);
+    --field-border-hover: oklch(0.42 0.008 286.32);
+  }
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background-color: oklch(0.985 0 0);
+}
+
+input[type='file'] {
+  @apply text-sm text-default-600 file:mr-3 file:rounded-md file:border-0 file:bg-default-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-foreground hover:file:bg-default-200;
+}

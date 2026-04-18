@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.idea
+.vscode
+data
+uploads
+*.db
+*.db-journal
+.env
+.env.local
