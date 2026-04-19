@@ -6,6 +6,7 @@ import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
 import { toggleScansRevealed } from '@/lib/store/ui-slice';
 import { useDeleteScanMutation, useUploadScansMutation } from '@/lib/store/scans-api';
 import { FullScreenModal } from '@/components/full-screen-modal';
+import { formatDate } from '@/lib/format';
 import type { PassportScan } from '@/lib/store/people-api';
 
 interface Props {
@@ -21,7 +22,7 @@ function formatSize(bytes: number): string {
 
 export function PassportScansBlock({ personId, scans }: Props) {
   const dispatch = useAppDispatch();
-  const revealed = useAppSelector((s) => s.ui.scansRevealedFor[personId] ?? false);
+  const revealed = useAppSelector((s) => s.ui.scansRevealedFor[personId] ?? true);
   const [uploadScans, { isLoading: uploading }] = useUploadScansMutation();
   const [deleteScan] = useDeleteScanMutation();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -165,7 +166,7 @@ function ScanCard({
           {scan.filename}
         </div>
         <div className="text-[10px] text-default-500">
-          {formatSize(scan.sizeBytes)} · {new Date(scan.uploadedAt).toLocaleDateString('ru-RU')}
+          {formatSize(scan.sizeBytes)} · {formatDate(scan.uploadedAt)}
         </div>
       </div>
       <Button size="sm" variant="ghost" onPress={onDelete}>

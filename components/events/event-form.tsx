@@ -3,6 +3,7 @@
 import { Button, Card, Switch } from '@heroui/react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { DatePickerField } from '@/components/date-picker-field';
 import { Field, TextAreaField } from '@/components/form-field';
 import { SelectField } from '@/components/select-field';
 import { CURRENCY_OPTIONS, MEAL_TYPE_OPTIONS, TRANSPORT_OPTIONS } from '@/lib/validators';
@@ -98,8 +99,8 @@ export function EventForm({ initial, mode, submitting, fieldErrors, onSubmit, hi
             error={pickError('title')}
             className="md:col-span-2"
           />
-          <Field label="Дата начала" type="date" value={startDate} onChange={setStartDate} isRequired error={pickError('startDate')} />
-          <Field label="Дата окончания" type="date" value={endDate} onChange={setEndDate} isRequired error={pickError('endDate')} />
+          <DatePickerField label="Дата начала" value={startDate} onChange={setStartDate} isRequired error={pickError('startDate')} />
+          <DatePickerField label="Дата окончания" value={endDate} onChange={setEndDate} isRequired error={pickError('endDate')} minValue={startDate || undefined} />
           <Field label="Место" value={location} onChange={setLocation} isRequired error={pickError('location')} className="md:col-span-2" />
           <Field label="Стоимость" value={cost} onChange={setCost} placeholder="0.00" inputMode="decimal" error={pickError('cost')} />
           <SelectField<Currency>
@@ -142,8 +143,8 @@ export function EventForm({ initial, mode, submitting, fieldErrors, onSubmit, hi
               options={MEAL_TYPE_OPTIONS}
               error={pickError('mealType')}
             />
-            <Field label="Проживание с" type="date" value={staysFrom} onChange={setStaysFrom} />
-            <Field label="Проживание по" type="date" value={staysTo} onChange={setStaysTo} />
+            <DatePickerField label="Проживание с" value={staysFrom} onChange={setStaysFrom} />
+            <DatePickerField label="Проживание по" value={staysTo} onChange={setStaysTo} minValue={staysFrom || undefined} />
             <Field label="Стоимость размещения" value={accommodationCost} onChange={setAccommodationCost} inputMode="decimal" />
             <SelectField<TransportType>
               label="Транспорт"

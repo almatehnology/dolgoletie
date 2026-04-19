@@ -1,10 +1,12 @@
 'use client';
 
-import { Button, Card } from '@heroui/react';
+import { Button } from '@heroui/react';
 import { useEffect, useState } from 'react';
-import { Field } from '@/components/form-field';
 import { useUpdateEventMutation, type Currency, type ExcursionInput } from '@/lib/store/events-api';
 import { formatMoney } from '@/lib/format';
+
+const INPUT_CLS =
+  'h-9 w-full rounded-md border border-default-300 bg-white px-2.5 text-sm text-foreground shadow-sm transition placeholder:text-default-400 hover:border-default-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
 
 interface Props {
   eventId: string;
@@ -18,7 +20,6 @@ export function EventExcursionsEditor({ eventId, currency, excursions }: Props) 
   const [error, setError] = useState<string | null>(null);
   const [updateEvent, { isLoading }] = useUpdateEventMutation();
 
-  // Синхронизируемся с данными с сервера при смене мероприятия или после сохранения.
   useEffect(() => {
     setItems(excursions.map((e) => ({ id: e.id, name: e.name, cost: e.cost ?? '' })));
     setDirty(false);
@@ -64,64 +65,73 @@ export function EventExcursionsEditor({ eventId, currency, excursions }: Props) 
   }, 0);
 
   return (
-    <Card>
-      <Card.Header className="flex items-center justify-between p-6 pb-4">
-        <div>
-          <Card.Title>Экскурсии</Card.Title>
-          <Card.Description>
-            Всего: {items.length}
-            {total > 0 ? ` · сумма: ${formatMoney(total, currency)}` : ''}
-          </Card.Description>
-        </div>
-        <Button type="button" variant="secondary" size="sm" onPress={addRow}>
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-default-500">
+          Всего: {items.length}
+          {total > 0 ? ` · сумма: ${formatMoney(total, currency)}` : ''}
+        </p>
+        <Button type="button" variant="primary" size="sm" onPress={addRow}>
           + Добавить
         </Button>
-      </Card.Header>
-      <Card.Content className="flex flex-col gap-3 p-6 pt-2">
-        {items.length === 0 ? (
-          <p className="text-sm text-default-500">Экскурсий нет. Нажмите «Добавить», чтобы завести первую.</p>
-        ) : (
-          <div className="flex flex-col gap-4">
-            {items.map((ex, idx) => (
-              <div
-                key={idx}
-                className="flex flex-col gap-3 rounded-lg border border-default-200 bg-default-50/40 p-4"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium uppercase tracking-wide text-default-500">
-                    Экскурсия #{idx + 1}
-                  </span>
-                  <Button type="button" size="sm" variant="ghost" onPress={() => removeRow(idx)}>
-                    Удалить
-                  </Button>
-                </div>
-                <Field
-                  label="Название"
-                  value={ex.name}
-                  onChange={(v) => patch(idx, { name: v })}
-                  placeholder="Например, Замок Паланок"
-                />
-                <Field
-                  label={`Стоимость (${currency})`}
-                  value={ex.cost ?? ''}
-                  onChange={(v) => patch(idx, { cost: v })}
-                  inputMode="decimal"
-                  placeholder="0.00"
-                />
-              </div>
-            ))}
-          </div>
-        )}
+      </div>
 
-        {error ? <p className="text-sm text-danger">{error}</p> : null}
-
-        <div className="flex items-center gap-2 pt-2">
-          <Button variant="primary" isDisabled={!dirty || isLoading} onPress={save}>
-            {isLoading ? 'Сохранение…' : 'Сохранить экскурсии'}
-          </Button>
-          {dirty ? <span className="text-xs text-warning">Есть несохранённые изменения</span> : null}
+      {items.length === 0 ? (
+        <p className="text-sm text-default-500">
+          Экскурсий нет. Нажмите «Добавить», чтобы завести первую.
+        </p>
+      ) : (
+        <div className="overflow-hidden rounded-md border border-default-200">
+          <table className="w-full text-sm">
+            <thead className="bg-default-50 text-left text-xs uppercase tracking-wide text-default-500">
+              <tr>
+                <th className="px-3 py-2 w-8">#</th>
+                <th className="px-3 py-2">Название</th>
+                <th className="px-3 py-2 w-40">Стоимость ({currency})</th>
+                <th className="px-3 py-2 w-24 text-right">Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((ex, idx) => (
+                <tr key={idx} className="border-t border-default-200">
+                  <td className="px-3 py-1.5 text-default-500">{idx + 1}</td>
+                  <td className="px-2 py-1.5">
+                    <input
+                      className={INPUT_CLS}
+                      value={ex.name}
+                      onChange={(e) => patch(idx, { name: e.currentTarget.value })}
+                      placeholder="Например, Замок Паланок"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <input
+                      className={INPUT_CLS}
+                      value={ex.cost ?? ''}
+                      onChange={(e) => patch(idx, { cost: e.currentTarget.value })}
+                      inputMode="decimal"
+                      placeholder="0.00"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-right">
+                    <Button type="button" size="sm" variant="ghost" onPress={() => removeRow(idx)}>
+                      Удалить
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      </Card.Content>
-    </Card>
+      )}
+
+      {error ? <p className="text-sm text-danger">{error}</p> : null}
+
+      <div className="flex items-center gap-2">
+        <Button variant="primary" isDisabled={!dirty || isLoading} onPress={save}>
+          {isLoading ? 'Сохранение…' : 'Сохранить экскурсии'}
+        </Button>
+        {dirty ? <span className="text-xs text-warning">Есть несохранённые изменения</span> : null}
+      </div>
+    </div>
   );
 }

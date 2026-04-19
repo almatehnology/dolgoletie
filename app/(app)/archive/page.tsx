@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useListPeopleQuery, useRestorePersonMutation } from '@/lib/store/people-api';
 import { useListEventsQuery, useRestoreEventMutation } from '@/lib/store/events-api';
-import { formatDateRange, fullName } from '@/lib/format';
+import { formatDate, formatDateRange, fullName } from '@/lib/format';
 
 export default function ArchivePage() {
   const [tab, setTab] = useState<'people' | 'events'>('people');
@@ -65,7 +65,7 @@ function ArchivedPeople() {
               </td>
               <td className="px-3 py-2 text-default-600">{p.passportNumber ?? '—'}</td>
               <td className="px-3 py-2 text-default-600">
-                {p.deletedAt ? new Date(p.deletedAt).toLocaleDateString('ru-RU') : '—'}
+                {formatDate(p.deletedAt)}
               </td>
               <td className="px-3 py-2 text-right">
                 <Button size="sm" variant="primary" onPress={() => restore(p.id)}>

@@ -1,10 +1,11 @@
 'use client';
 
-import { Button, Card, Spinner } from '@heroui/react';
+import { Button, Spinner } from '@heroui/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { use, useState } from 'react';
 import { PersonForm } from '@/components/people/person-form';
+import { PersonView } from '@/components/people/person-view';
 import { PassportScansBlock } from '@/components/people/passport-scans';
 import { PersonParticipationsBlock } from '@/components/people/person-participations';
 import { TabNav } from '@/components/tab-nav';
@@ -24,6 +25,7 @@ export default function PersonDetailPage({ params }: { params: Promise<{ id: str
   const [restorePerson] = useRestorePersonMutation();
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   if (isLoading) {
     return (
@@ -59,6 +61,15 @@ export default function PersonDetailPage({ params }: { params: Promise<{ id: str
           ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
+          {!editing ? (
+            <Button variant="primary" onPress={() => setEditing(true)}>
+              Редактировать
+            </Button>
+          ) : (
+            <Button variant="ghost" onPress={() => setEditing(false)}>
+              Закрыть редактирование
+            </Button>
+          )}
           <a
             href={`/api/people/${id}/export`}
             className="inline-flex h-10 items-center rounded-md border border-default-300 bg-white px-4 text-sm font-medium text-foreground shadow-sm transition hover:border-default-400 hover:bg-default-50"
@@ -99,50 +110,55 @@ export default function PersonDetailPage({ params }: { params: Promise<{ id: str
             label: 'Основные данные',
             content: (
               <div className="flex flex-col gap-6">
-                <PersonForm
-                  mode="edit"
-                  submitting={saving}
-                  fieldErrors={errors}
-                  initial={{
-                    lastName: data.lastName,
-                    firstName: data.firstName,
-                    middleName: data.middleName ?? undefined,
-                    phone: data.phone ?? undefined,
-                    gender: data.gender ?? undefined,
-                    birthPlace: data.birthPlace ?? undefined,
-                    registrationAddress: data.registrationAddress ?? undefined,
-                    passportNumber: data.passportNumber ?? undefined,
-                    passportIssuedBy: data.passportIssuedBy ?? undefined,
-                    passportIssuedAt: data.passportIssuedAt ?? undefined,
-                    passportExpiresAt: data.passportExpiresAt ?? undefined,
-                    passportDepartmentCode: data.passportDepartmentCode ?? undefined,
-                    passportDetails: data.passportDetails ?? undefined,
-                    notes: data.notes ?? undefined,
-                  }}
-                  onSubmit={async (input) => {
-                    setErrors({});
-                    setGeneralError(null);
-                    try {
-                      await updatePerson({ id, data: input }).unwrap();
-                    } catch (err) {
-                      const e = err as {
-                        data?: { error?: { message?: string; fields?: Record<string, string[]> } };
-                      };
-                      setErrors(e.data?.error?.fields ?? {});
-                      setGeneralError(e.data?.error?.message ?? 'Не удалось сохранить');
-                    }
-                  }}
-                />
+                {editing ? (
+                  <PersonForm
+                    mode="edit"
+                    submitting={saving}
+                    fieldErrors={errors}
+                    initial={{
+                      lastName: data.lastName,
+                      firstName: data.firstName,
+                      middleName: data.middleName ?? undefined,
+                      phone: data.phone ?? undefined,
+                      gender: data.gender ?? undefined,
+                      birthPlace: data.birthPlace ?? undefined,
+                      registrationAddress: data.registrationAddress ?? undefined,
+                      passportNumber: data.passportNumber ?? undefined,
+                      passportIssuedBy: data.passportIssuedBy ?? undefined,
+                      passportIssuedAt: data.passportIssuedAt ?? undefined,
+                      passportExpiresAt: data.passportExpiresAt ?? undefined,
+                      passportDepartmentCode: data.passportDepartmentCode ?? undefined,
+                      passportDetails: data.passportDetails ?? undefined,
+                      notes: data.notes ?? undefined,
+                    }}
+                    onCancel={() => {
+                      setEditing(false);
+                      setErrors({});
+                      setGeneralError(null);
+                    }}
+                    onSubmit={async (input) => {
+                      setErrors({});
+                      setGeneralError(null);
+                      try {
+                        await updatePerson({ id, data: input }).unwrap();
+                        setEditing(false);
+                      } catch (err) {
+                        const e = err as {
+                          data?: { error?: { message?: string; fields?: Record<string, string[]> } };
+                        };
+                        setErrors(e.data?.error?.fields ?? {});
+                        setGeneralError(e.data?.error?.message ?? 'Не удалось сохранить');
+                      }
+                    }}
+                  />
+                ) : (
+                  <PersonView person={data} />
+                )}
 
-                <Card>
-                  <Card.Header>
-                    <Card.Title>Документы</Card.Title>
-                    <Card.Description>Сканы паспорта скрыты по умолчанию.</Card.Description>
-                  </Card.Header>
-                  <Card.Content className="p-6">
-                    <PassportScansBlock personId={id} scans={data.scans} />
-                  </Card.Content>
-                </Card>
+                <section className="flex flex-col gap-2">
+                  <h2 className="text-lg font-semibold text-foreground">Документы</h2>
+                  <PassportScansBlock personId={id} scans={data.scans} />
+                </section>
               </div>
             ),
           },
@@ -151,15 +167,11 @@ export default function PersonDetailPage({ params }: { params: Promise<{ id: str
             label: 'Мероприятия',
             badge: data.participations.length,
             content: (
-              <Card>
-                <Card.Content className="p-6">
-                  <PersonParticipationsBlock
-                    personId={id}
-                    participations={data.participations}
-                    currencyDefault="RUB"
-                  />
-                </Card.Content>
-              </Card>
+              <PersonParticipationsBlock
+                personId={id}
+                participations={data.participations}
+                currencyDefault="RUB"
+              />
             ),
           },
         ]}

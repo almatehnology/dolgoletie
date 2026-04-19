@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { use, useState } from 'react';
 import { EventForm } from '@/components/events/event-form';
+import { EventView } from '@/components/events/event-view';
 import { EventExcursionsEditor } from '@/components/events/event-excursions-editor';
 import { EventParticipantsBlock } from '@/components/events/event-participants';
 import { TabNav } from '@/components/tab-nav';
@@ -25,6 +26,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const [restoreEvent] = useRestoreEventMutation();
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   if (isLoading) {
     return (
@@ -61,6 +63,15 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
           ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
+          {!editing ? (
+            <Button variant="primary" onPress={() => setEditing(true)}>
+              Редактировать
+            </Button>
+          ) : (
+            <Button variant="ghost" onPress={() => setEditing(false)}>
+              Закрыть редактирование
+            </Button>
+          )}
           <a
             href={`/api/events/${id}/export`}
             className="inline-flex h-10 items-center rounded-md border border-default-300 bg-white px-4 text-sm font-medium text-foreground shadow-sm transition hover:border-default-400 hover:bg-default-50"
@@ -99,7 +110,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
           {
             id: 'details',
             label: 'Основные данные',
-            content: (
+            content: editing ? (
               <EventForm
                 mode="edit"
                 submitting={saving}
@@ -133,10 +144,10 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                   setErrors({});
                   setGeneralError(null);
                   try {
-                    // Исключаем excursions — они сохраняются в своей вкладке.
                     const { excursions: _unused, ...rest } = input;
                     void _unused;
                     await updateEvent({ id, data: rest }).unwrap();
+                    setEditing(false);
                   } catch (err) {
                     const e = err as {
                       data?: { error?: { message?: string; fields?: Record<string, string[]> } };
@@ -146,6 +157,8 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                   }
                 }}
               />
+            ) : (
+              <EventView event={data} />
             ),
           },
           {
@@ -165,15 +178,11 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
             label: 'Участники',
             badge: data.participations.length,
             content: (
-              <Card>
-                <Card.Content className="p-6">
-                  <EventParticipantsBlock
-                    eventId={id}
-                    currency={data.currency}
-                    participations={data.participations}
-                  />
-                </Card.Content>
-              </Card>
+              <EventParticipantsBlock
+                eventId={id}
+                currency={data.currency}
+                participations={data.participations}
+              />
             ),
           },
         ]}

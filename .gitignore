@@ -5,8 +5,8 @@ dist
 .DS_Store
 
 # Локальные данные
-data/
-uploads/
+/data/
+/uploads/
 *.db
 *.db-journal
 

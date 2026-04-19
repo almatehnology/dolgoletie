@@ -56,8 +56,8 @@ export default function PeoplePage() {
               <th className="px-4 py-3">ФИО</th>
               <th className="px-4 py-3">Телефон</th>
               <th className="px-4 py-3">Паспорт</th>
-              <th className="px-4 py-3 text-right">Мероприятий</th>
-              <th className="px-4 py-3 text-right">Сканов</th>
+              <th className="px-4 py-3 text-right">Мероприятия</th>
+              <th className="px-4 py-3 text-right">Документы</th>
             </tr>
           </thead>
           <tbody>

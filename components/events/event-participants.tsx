@@ -15,7 +15,7 @@ import {
   type PaymentStatus,
 } from '@/lib/store/events-api';
 import { useListPeopleQuery, type PersonListItem } from '@/lib/store/people-api';
-import { formatMoney, fullName } from '@/lib/format';
+import { formatDate, formatMoney, fullName } from '@/lib/format';
 
 interface Props {
   eventId: string;
@@ -67,7 +67,7 @@ export function EventParticipantsBlock({ eventId, currency, participations }: Pr
                     <PaymentStatusChip status={p.paymentStatus} />
                   </td>
                   <td className="px-3 py-2 text-default-600">
-                    {p.prepaidAmount ? `${formatMoney(p.prepaidAmount, currency)} предоплата` : ''}
+                    {p.prepaidAmount ? formatMoney(p.prepaidAmount, currency) : ''}
                     {p.totalDue ? (
                       <span className={p.prepaidAmount ? 'ml-1 text-default-400' : ''}>
                         {p.prepaidAmount ? '/ ' : ''}
@@ -228,9 +228,7 @@ function PersonResultCard({
   selected: boolean;
   onSelect: () => void;
 }) {
-  const issuedAt = person.passportIssuedAt
-    ? new Date(person.passportIssuedAt).toLocaleDateString('ru-RU')
-    : null;
+  const issuedAt = person.passportIssuedAt ? formatDate(person.passportIssuedAt) : null;
   return (
     <button
       type="button"

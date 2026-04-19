@@ -9,11 +9,21 @@ export function formatMoney(value: string | number | null | undefined, currency:
   }).format(num);
 }
 
+const DATE_FMT = new Intl.DateTimeFormat('en-GB', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+});
+
+export function formatDate(value: string | Date | null | undefined): string {
+  if (!value) return '—';
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return typeof value === 'string' ? value : '—';
+  return DATE_FMT.format(d);
+}
+
 export function formatDateRange(start: string | Date, end: string | Date): string {
-  const s = new Date(start);
-  const e = new Date(end);
-  const fmt = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  return `${fmt.format(s)} – ${fmt.format(e)}`;
+  return `${formatDate(start)} – ${formatDate(end)}`;
 }
 
 export function fullName(p: { lastName: string; firstName: string; middleName?: string | null }): string {
