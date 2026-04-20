@@ -3,6 +3,7 @@
 import { Button, Spinner } from '@heroui/react';
 import Link from 'next/link';
 import { useState } from 'react';
+import { DatePickerField } from '@/components/date-picker-field';
 import { Field } from '@/components/form-field';
 import { ImportJsonButton } from '@/components/import-json-button';
 import { useListEventsQuery } from '@/lib/store/events-api';
@@ -35,19 +36,18 @@ export default function EventsPage() {
             placeholder="Название, место, программа…"
             className="w-60"
           />
-          <Field
+          <DatePickerField
             label="С"
-            type="date"
             value={from}
             onChange={(v) => { setFrom(v); setPage(1); }}
             className="w-40"
           />
-          <Field
+          <DatePickerField
             label="По"
-            type="date"
             value={to}
             onChange={(v) => { setTo(v); setPage(1); }}
             className="w-40"
+            minValue={from || undefined}
           />
           <ImportJsonButton
             endpoint="/api/events/import"

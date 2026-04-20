@@ -1,6 +1,6 @@
 'use client';
 
-import { RouterProvider } from '@heroui/react';
+import { I18nProvider, RouterProvider } from '@heroui/react';
 import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { ReduxProvider } from '@/lib/store/provider';
@@ -15,7 +15,9 @@ export function Providers({ children }: { children: ReactNode }) {
   const router = useRouter();
   return (
     <ReduxProvider>
-      <RouterProvider navigate={(href) => router.push(href)}>{children}</RouterProvider>
+      <I18nProvider locale="ru-RU">
+        <RouterProvider navigate={(href) => router.push(href)}>{children}</RouterProvider>
+      </I18nProvider>
     </ReduxProvider>
   );
 }
