@@ -10,6 +10,7 @@ export function formatMoney(value: string | number | null | undefined, currency:
 }
 
 const DATE_FMT = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'UTC',
   day: '2-digit',
   month: '2-digit',
   year: 'numeric',

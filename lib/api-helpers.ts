@@ -44,8 +44,7 @@ export function handlePrismaError(err: unknown): NextResponse {
       return apiError('NOT_FOUND', 'Запись не найдена', 404);
     }
   }
-  // eslint-disable-next-line no-console
-  console.error('[api] unexpected error', err);
+  console.error('[api] unexpected database error');
   return apiError('INTERNAL', 'Внутренняя ошибка', 500);
 }
 

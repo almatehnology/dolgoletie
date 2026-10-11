@@ -1,33 +1,14 @@
-import { getIronSession, type SessionOptions } from 'iron-session';
+import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
+import { sessionIsConfigured, sessionOptions } from './auth/session-options';
+import { authError } from './auth/errors';
+import type { SessionData } from './auth/types';
 
-export type SessionData = {
-  authenticated?: boolean;
-  loggedInAt?: number;
-};
-
-const secret = process.env.SESSION_SECRET;
-if (!secret || secret.length < 32) {
-  // eslint-disable-next-line no-console
-  console.warn('[session] SESSION_SECRET отсутствует или слишком короткий (нужно >= 32 символа)');
-}
-
-export const sessionOptions: SessionOptions = {
-  password: secret ?? 'insecure-development-secret-please-change-me-xxxxxxxxx',
-  cookieName: 'tdb_session',
-  cookieOptions: {
-    httpOnly: true,
-    sameSite: 'lax',
-    // Локально приложение ходит по HTTP. Secure-кука отбрасывается браузером
-    // на http-соединении → бесконечный редирект. Включаем только если явно
-    // указан COOKIE_SECURE=true (например, за HTTPS-прокси).
-    secure: process.env.COOKIE_SECURE === 'true',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 30,
-  },
-};
+export { sessionOptions } from './auth/session-options';
+export type { SessionData } from './auth/types';
 
 export async function getSession() {
+  if (!sessionIsConfigured()) throw authError('SESSION_NOT_CONFIGURED', 'Для входа требуется локальный SESSION_SECRET длиной не менее 32 символов', 503);
   const store = await cookies();
   return getIronSession<SessionData>(store, sessionOptions);
 }

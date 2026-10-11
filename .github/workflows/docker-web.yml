@@ -1,0 +1,53 @@
+name: Docker web runtime
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker-web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Build Linux container from the committed lockfile
+        run: docker build --tag traveldatabase-ci:local .
+      - name: Verify isolated first setup, both roles and real database access
+        shell: bash
+        run: |
+          set -euo pipefail
+          tdb_ci_root=$(mktemp -d)
+          tdb_ci_url=http://127.0.0.1:3337
+          mkdir -p "$tdb_ci_root/data" "$tdb_ci_root/uploads"
+          trap 'docker logs traveldatabase-ci 2>&1 || true; docker rm -f traveldatabase-ci >/dev/null 2>&1 || true; rm -rf "$tdb_ci_root"' EXIT
+          docker run -d --name traveldatabase-ci \
+            -p 127.0.0.1:3337:3000 \
+            -e DATA_DIR=/app/data -e DATABASE_URL=file:/app/data/data.db \
+            -e UPLOADS_DIR=/app/uploads -e COOKIE_SECURE=false -e APP_PASSWORD= \
+            -e SESSION_SECRET=docker-ci-synthetic-session-secret-not-for-production \
+            -v "$tdb_ci_root/data:/app/data" -v "$tdb_ci_root/uploads:/app/uploads" \
+            traveldatabase-ci:local
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail "$tdb_ci_url/setup" > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --silent --show-error --fail "$tdb_ci_url/setup" > /dev/null
+          curl --silent --show-error --fail -H "Origin: $tdb_ci_url" -H 'Content-Type: application/json' \
+            -d '{"password":"ci-admin-password-only"}' "$tdb_ci_url/api/setup" > /dev/null
+          curl --silent --show-error --fail -c "$tdb_ci_root/cookies" -H "Origin: $tdb_ci_url" -H 'Content-Type: application/json' \
+            -d '{"username":"admin","password":"ci-admin-password-only"}' "$tdb_ci_url/api/auth/login" > /dev/null
+          denied=$(curl --silent --output /dev/null --write-out '%{http_code}' -b "$tdb_ci_root/cookies" "$tdb_ci_url/api/people")
+          test "$denied" = 403
+          curl --silent --show-error --fail -b "$tdb_ci_root/cookies" -H "Origin: $tdb_ci_url" -H 'Content-Type: application/json' \
+            -d '{"username":"operator","password":"ci-primary-password-only"}' "$tdb_ci_url/api/admin/user" > /dev/null
+          curl --silent --show-error --fail -b "$tdb_ci_root/cookies" -c "$tdb_ci_root/cookies" -H "Origin: $tdb_ci_url" -X POST \
+            "$tdb_ci_url/api/auth/logout" > /dev/null
+          curl --silent --show-error --fail -c "$tdb_ci_root/cookies" -H "Origin: $tdb_ci_url" -H 'Content-Type: application/json' \
+            -d '{"username":"operator","password":"ci-primary-password-only"}' "$tdb_ci_url/api/auth/login" > /dev/null
+          curl --silent --show-error --fail -b "$tdb_ci_root/cookies" "$tdb_ci_url/api/people" > /dev/null
+          test -s "$tdb_ci_root/data/data.db"
+          echo 'Docker first setup, role isolation, native SQLite migrations and primary access passed.'

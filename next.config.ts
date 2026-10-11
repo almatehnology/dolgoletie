@@ -2,7 +2,12 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   output: 'standalone',
-  serverExternalPackages: ['unzipper', 'archiver', 'sharp', 'pdfkit'],
+  skipMiddlewareUrlNormalize: true,
+  distDir: process.env.TDB_DIST_DIR ?? '.next',
+  outputFileTracingRoot: process.cwd(),
+  serverExternalPackages: ['unzipper', 'archiver', 'sharp', 'pdfkit', 'argon2', 'better-sqlite3-multiple-ciphers', '@prisma/driver-adapter-utils'],
+  outputFileTracingIncludes: { '/**': ['./prisma/migrations/**/*', './assets/fonts/**/*', './node_modules/better-sqlite3-multiple-ciphers/prebuilds/**/*'] },
+  outputFileTracingExcludes: { '/**': ['./.env', './.env.*', './data/**/*', './uploads/**/*', './prisma/data/**/*', './prisma/**/*.db', './prisma/**/*.db-*', './prisma/**/*.sqlite', './prisma/**/*.sqlite-*'] },
   experimental: {
     serverActions: {
       bodySizeLimit: '20mb',

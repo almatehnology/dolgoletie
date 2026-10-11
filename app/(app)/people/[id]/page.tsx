@@ -9,6 +9,7 @@ import { PersonView } from '@/components/people/person-view';
 import { PassportScansBlock } from '@/components/people/passport-scans';
 import { PersonParticipationsBlock } from '@/components/people/person-participations';
 import { TabNav } from '@/components/tab-nav';
+import { ExportDialog } from '@/components/export-dialog';
 import {
   useDeletePersonMutation,
   useGetPersonQuery,
@@ -26,6 +27,7 @@ export default function PersonDetailPage({ params }: { params: Promise<{ id: str
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   if (isLoading) {
     return (
@@ -70,18 +72,7 @@ export default function PersonDetailPage({ params }: { params: Promise<{ id: str
               Закрыть редактирование
             </Button>
           )}
-          <a
-            href={`/api/people/${id}/export`}
-            className="inline-flex h-10 items-center rounded-md border border-default-300 bg-white px-4 text-sm font-medium text-foreground shadow-sm transition hover:border-default-400 hover:bg-default-50"
-          >
-            Экспорт JSON
-          </a>
-          <a
-            href={`/api/people/${id}/pdf`}
-            className="inline-flex h-10 items-center rounded-md border border-default-300 bg-white px-4 text-sm font-medium text-foreground shadow-sm transition hover:border-default-400 hover:bg-default-50"
-          >
-            Экспорт в PDF
-          </a>
+          <Button variant="outline" isDisabled={archived} onPress={() => setExporting(true)}>Экспорт PDF / XLSX</Button>
           {archived ? (
             <Button variant="primary" onPress={() => restorePerson(id)}>
               Восстановить
@@ -102,6 +93,7 @@ export default function PersonDetailPage({ params }: { params: Promise<{ id: str
       </header>
 
       {generalError ? <p className="text-sm text-danger">{generalError}</p> : null}
+      <ExportDialog context="people" personIds={[id]} isOpen={exporting} onClose={() => setExporting(false)} />
 
       <TabNav
         items={[
@@ -120,6 +112,7 @@ export default function PersonDetailPage({ params }: { params: Promise<{ id: str
                       firstName: data.firstName,
                       middleName: data.middleName ?? undefined,
                       phone: data.phone ?? undefined,
+                  birthDate: data.birthDate ?? undefined,
                       gender: data.gender ?? undefined,
                       birthPlace: data.birthPlace ?? undefined,
                       registrationAddress: data.registrationAddress ?? undefined,

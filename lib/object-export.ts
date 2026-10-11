@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { prisma } from './db';
-import type { Currency, Person, Event, Excursion, PassportScan, TransportType } from '@prisma/client';
+import type { Currency, Person, Event, Excursion, PassportScan, TransportType, Prisma } from '@prisma/client';
+import { vaultEncryptionEnabled } from './storage/vault';
+import { apiError } from './api-helpers';
 
 const FORMAT_VERSION = 1;
 const PERSON_TYPE = 'dolgoletie/person';
@@ -21,6 +23,7 @@ const personDataSchema = z.object({
   firstName: z.string().min(1),
   middleName: z.string().nullable().optional(),
   phone: z.string().nullable().optional(),
+  birthDate: z.string().nullable().optional(),
   gender: z.enum(['MALE', 'FEMALE', 'OTHER']).nullable().optional(),
   birthPlace: z.string().nullable().optional(),
   registrationAddress: z.string().nullable().optional(),
@@ -35,6 +38,7 @@ const personDataSchema = z.object({
 });
 
 const excursionDataSchema = z.object({
+  id: z.string().min(1).optional(),
   name: z.string().min(1),
   cost: z.string().nullable().optional(),
 });
@@ -76,6 +80,12 @@ export const eventEnvelopeSchema = z.object({
 
 // ---- Экспорт ----
 
+export function assertLegacyObjectExportAllowed() {
+  if (vaultEncryptionEnabled()) {
+    throw apiError('LEGACY_EXPORT_DISABLED', 'JSON-экспорт недоступен при включённом шифровании. Используйте отчёт PDF/XLSX или защищённый файл синхронизации.', 409);
+  }
+}
+
 type PersonWithScans = Person & { scans: PassportScan[] };
 type EventWithExcursions = Event & { excursions: Excursion[] };
 
@@ -89,6 +99,7 @@ export function buildPersonEnvelope(person: PersonWithScans) {
       firstName: person.firstName,
       middleName: person.middleName,
       phone: person.phone,
+      birthDate: person.birthDate,
       gender: person.gender,
       birthPlace: person.birthPlace,
       registrationAddress: person.registrationAddress,
@@ -134,6 +145,7 @@ export function buildEventEnvelope(event: EventWithExcursions) {
       transportInfo: event.transportInfo,
       transportCost: event.transportCost ? event.transportCost.toString() : null,
       excursions: event.excursions.map((ex) => ({
+        id: ex.id,
         name: ex.name,
         cost: ex.cost ? ex.cost.toString() : null,
       })),
@@ -154,6 +166,39 @@ export interface ImportResult<T> {
   record: T;
 }
 
+async function reconcileImportedExcursions(
+  tx: Prisma.TransactionClient,
+  eventId: string,
+  excursions: z.infer<typeof excursionDataSchema>[],
+) {
+  const ids = excursions.flatMap((ex) => ex.id === undefined ? [] : [ex.id]);
+  if (new Set(ids).size !== ids.length) {
+    throw new Error('Некорректные идентификаторы экскурсий: повторяющийся ID');
+  }
+  const referenced = ids.length ? await tx.excursion.findMany({ where: { id: { in: ids } } }) : [];
+  if (referenced.some((ex) => ex.eventId !== eventId)) {
+    throw new Error('Некорректные идентификаторы экскурсий: ID принадлежит другому мероприятию');
+  }
+  const existing = await tx.excursion.findMany({ where: { eventId } });
+  const kept = new Set(ids);
+  for (const ex of excursions) {
+    // Older JSON has no IDs. Reuse only an unambiguous unchanged name.
+    const candidates = ex.id === undefined
+      ? existing.filter((row) => row.name === ex.name && !kept.has(row.id))
+      : existing.filter((row) => row.id === ex.id);
+    const match = candidates.length === 1 ? candidates[0] : undefined;
+    const values = { name: ex.name, cost: ex.cost ?? null };
+    if (match) {
+      kept.add(match.id);
+      await tx.excursion.update({ where: { id: match.id }, data: values });
+    } else {
+      const created = await tx.excursion.create({ data: { ...values, eventId, ...(ex.id !== undefined && { id: ex.id }) } });
+      kept.add(created.id);
+    }
+  }
+  await tx.excursion.deleteMany({ where: { eventId, id: { notIn: [...kept] } } });
+}
+
 export async function importPerson(
   envelope: z.infer<typeof personEnvelopeSchema>,
 ): Promise<ImportResult<Person>> {
@@ -171,6 +216,7 @@ export async function importPerson(
     firstName: d.firstName,
     middleName: d.middleName ?? null,
     phone: d.phone ?? null,
+    ...(d.birthDate !== undefined && { birthDate: d.birthDate }),
     gender: d.gender ?? null,
     birthPlace: d.birthPlace ?? null,
     registrationAddress: d.registrationAddress ?? null,
@@ -228,31 +274,15 @@ export async function importEvent(
   const record = await prisma.$transaction(async (tx) => {
     if (existing) {
       const updated = await tx.event.update({ where: { id: existing.id }, data: values });
-      if (d.excursions) {
-        await tx.excursion.deleteMany({ where: { eventId: existing.id } });
-        if (d.excursions.length > 0) {
-          await tx.excursion.createMany({
-            data: d.excursions.map((ex) => ({
-              eventId: existing.id,
-              name: ex.name,
-              cost: ex.cost ?? null,
-            })),
-          });
-        }
-      }
+      if (d.excursions !== undefined) await reconcileImportedExcursions(tx, existing.id, d.excursions);
       return { action: 'updated' as const, record: updated };
     }
     const created = await tx.event.create({
       data: {
         ...values,
-        excursions: {
-          create: (d.excursions ?? []).map((ex) => ({
-            name: ex.name,
-            cost: ex.cost ?? null,
-          })),
-        },
       },
     });
+    if (d.excursions !== undefined) await reconcileImportedExcursions(tx, created.id, d.excursions);
     return { action: 'created' as const, record: created };
   });
 

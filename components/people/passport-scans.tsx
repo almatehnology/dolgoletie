@@ -1,12 +1,14 @@
 'use client';
 
 import { Button, Modal } from '@heroui/react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
 import { toggleScansRevealed } from '@/lib/store/ui-slice';
 import { useDeleteScanMutation, useUploadScansMutation } from '@/lib/store/scans-api';
 import { FullScreenModal } from '@/components/full-screen-modal';
 import { formatDate } from '@/lib/format';
+import { saveLocalFile } from '@/lib/desktop-files';
+import { safeDownloadName } from '@/lib/file-names';
 import type { PassportScan } from '@/lib/store/people-api';
 
 interface Props {
@@ -22,14 +24,32 @@ function formatSize(bytes: number): string {
 
 export function PassportScansBlock({ personId, scans }: Props) {
   const dispatch = useAppDispatch();
-  const revealed = useAppSelector((s) => s.ui.scansRevealedFor[personId] ?? true);
+  const revealed = useAppSelector((s) => s.ui.scansRevealedFor[personId] ?? false);
   const [uploadScans, { isLoading: uploading }] = useUploadScansMutation();
   const [deleteScan] = useDeleteScanMutation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [viewId, setViewId] = useState<string | null>(null);
+  const [desktop, setDesktop] = useState(false);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setDesktop(!!window.travelDesktop); }, []);
 
   const viewing = viewId ? scans.find((s) => s.id === viewId) ?? null : null;
+
+  async function saveViewing() {
+    if (!viewing || saving) return;
+    setError(null);
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/scans/${viewing.id}`, { cache: 'no-store' });
+      if (!response.ok) throw new Error('Не удалось получить файл');
+      const extension = ({ 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' } as const)[viewing.mimeType as 'application/pdf' | 'image/jpeg' | 'image/png' | 'image/webp'];
+      if (!extension) throw new Error('Формат файла не поддерживается');
+      await saveLocalFile(await response.blob(), safeDownloadName(viewing.filename, extension));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось сохранить файл');
+    } finally { setSaving(false); }
+  }
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -98,6 +118,11 @@ export function PassportScansBlock({ personId, scans }: Props) {
         <Modal.Body className="flex-1 overflow-auto bg-default-50 p-0">
           {viewing ? (
             viewing.mimeType === 'application/pdf' ? (
+              desktop ? (
+                <div className="flex h-full items-center justify-center p-6 text-center">
+                  <p>Сохраните PDF кнопкой «Скачать» и откройте его в программе для просмотра документов.</p>
+                </div>
+              ) : (
               <object
                 data={`/api/scans/${viewing.id}`}
                 type="application/pdf"
@@ -107,6 +132,7 @@ export function PassportScansBlock({ personId, scans }: Props) {
                   Открыть PDF
                 </a>
               </object>
+              )
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -118,13 +144,10 @@ export function PassportScansBlock({ personId, scans }: Props) {
           ) : null}
         </Modal.Body>
         <Modal.Footer className="border-t border-default-200 px-5 py-3">
-          <a
-            href={`/api/scans/${viewing?.id ?? ''}`}
-            download={viewing?.filename}
-            className="text-sm text-primary hover:underline"
-          >
-            Скачать
-          </a>
+          {error ? <p className="text-sm text-danger">{error}</p> : null}
+          <Button variant="ghost" isDisabled={saving || !viewing} onPress={() => void saveViewing()}>
+            {saving ? 'Сохранение…' : 'Скачать'}
+          </Button>
         </Modal.Footer>
       </FullScreenModal>
     </div>

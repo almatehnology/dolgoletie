@@ -32,6 +32,7 @@ model Person {
   middleName             String?
   phone                  String?
   gender                 String?         // MALE | FEMALE | OTHER
+  birthDate              String?
   birthPlace             String?
   registrationAddress    String?
   passportNumber         String?
@@ -119,4 +120,36 @@ model Participation {
   @@unique([personId, eventId])
   @@index([personId])
   @@index([eventId])
+}
+
+model ImportReceipt {
+  id String @id
+  result String
+  createdAt DateTime @default(now())
+}
+
+model DatabaseMetadata {
+  id String @id @default("main")
+  databaseId String
+  createdAt DateTime @default(now())
+}
+
+model ChangeOperation {
+  id String @id
+  entity String
+  entityId String
+  before String?
+  after String?
+  parents String @default("[]")
+  deviceId String
+  sequence Int
+  createdAt DateTime @default(now())
+  @@index([entity, entityId])
+  @@unique([deviceId, sequence])
+}
+
+model SyncReceipt {
+  id String @id
+  result String
+  createdAt DateTime @default(now())
 }

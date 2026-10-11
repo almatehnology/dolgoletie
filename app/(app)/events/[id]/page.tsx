@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Card, Spinner } from '@heroui/react';
+import { Button, Spinner } from '@heroui/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { use, useState } from 'react';
@@ -8,6 +8,7 @@ import { EventForm } from '@/components/events/event-form';
 import { EventView } from '@/components/events/event-view';
 import { EventExcursionsEditor } from '@/components/events/event-excursions-editor';
 import { EventParticipantsBlock } from '@/components/events/event-participants';
+import { ExportDialog } from '@/components/export-dialog';
 import { TabNav } from '@/components/tab-nav';
 import {
   useDeleteEventMutation,
@@ -27,6 +28,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -78,12 +80,6 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
           >
             Экспорт JSON
           </a>
-          <a
-            href={`/api/events/${id}/pdf`}
-            className="inline-flex h-10 items-center rounded-md border border-default-300 bg-white px-4 text-sm font-medium text-foreground shadow-sm transition hover:border-default-400 hover:bg-default-50"
-          >
-            Экспорт в PDF
-          </a>
           {archived ? (
             <Button variant="primary" onPress={() => restoreEvent(id)}>
               Восстановить
@@ -110,55 +106,65 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
           {
             id: 'details',
             label: 'Основные данные',
-            content: editing ? (
-              <EventForm
-                mode="edit"
-                submitting={saving}
-                fieldErrors={errors}
-                hideExcursions
-                initial={{
-                  title: data.title,
-                  startDate: data.startDate,
-                  endDate: data.endDate,
-                  location: data.location,
-                  cost: data.cost ?? undefined,
-                  currency: data.currency,
-                  program: data.program ?? undefined,
-                  isOutbound: data.isOutbound,
-                  accommodationPlace: data.accommodationPlace ?? undefined,
-                  accommodationOrder: data.accommodationOrder ?? undefined,
-                  mealType: data.mealType ?? undefined,
-                  staysFrom: data.staysFrom ?? undefined,
-                  staysTo: data.staysTo ?? undefined,
-                  accommodationCost: data.accommodationCost ?? undefined,
-                  transportType: data.transportType ?? undefined,
-                  transportInfo: data.transportInfo ?? undefined,
-                  transportCost: data.transportCost ?? undefined,
-                  excursions: data.excursions.map((ex) => ({
-                    id: ex.id,
-                    name: ex.name,
-                    cost: ex.cost ?? '',
-                  })),
-                }}
-                onSubmit={async (input) => {
-                  setErrors({});
-                  setGeneralError(null);
-                  try {
-                    const { excursions: _unused, ...rest } = input;
-                    void _unused;
-                    await updateEvent({ id, data: rest }).unwrap();
-                    setEditing(false);
-                  } catch (err) {
-                    const e = err as {
-                      data?: { error?: { message?: string; fields?: Record<string, string[]> } };
-                    };
-                    setErrors(e.data?.error?.fields ?? {});
-                    setGeneralError(e.data?.error?.message ?? 'Не удалось сохранить');
-                  }
-                }}
-              />
-            ) : (
-              <EventView event={data} />
+            content: (
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm text-default-500">Отчёт: сведения мероприятия и все участники.</p>
+                  <Button variant="outline" onPress={() => setExportOpen(true)}>
+                    Экспортировать сведения
+                  </Button>
+                </div>
+                {editing ? (
+                  <EventForm
+                    mode="edit"
+                    submitting={saving}
+                    fieldErrors={errors}
+                    hideExcursions
+                    initial={{
+                      title: data.title,
+                      startDate: data.startDate,
+                      endDate: data.endDate,
+                      location: data.location,
+                      cost: data.cost ?? undefined,
+                      currency: data.currency,
+                      program: data.program ?? undefined,
+                      isOutbound: data.isOutbound,
+                      accommodationPlace: data.accommodationPlace ?? undefined,
+                      accommodationOrder: data.accommodationOrder ?? undefined,
+                      mealType: data.mealType ?? undefined,
+                      staysFrom: data.staysFrom ?? undefined,
+                      staysTo: data.staysTo ?? undefined,
+                      accommodationCost: data.accommodationCost ?? undefined,
+                      transportType: data.transportType ?? undefined,
+                      transportInfo: data.transportInfo ?? undefined,
+                      transportCost: data.transportCost ?? undefined,
+                      excursions: data.excursions.map((ex) => ({
+                        id: ex.id,
+                        name: ex.name,
+                        cost: ex.cost ?? '',
+                      })),
+                    }}
+                    onSubmit={async (input) => {
+                      setErrors({});
+                      setGeneralError(null);
+                      try {
+                        const { excursions: _unused, ...rest } = input;
+                        void _unused;
+                        await updateEvent({ id, data: rest }).unwrap();
+                        setEditing(false);
+                      } catch (err) {
+                        const e = err as {
+                          data?: { error?: { message?: string; fields?: Record<string, string[]> } };
+                        };
+                        setErrors(e.data?.error?.fields ?? {});
+                        setGeneralError(e.data?.error?.message ?? 'Не удалось сохранить');
+                      }
+                    }}
+                  />
+                ) : (
+                  <EventView event={data} />
+                )}
+              </div>
             ),
           },
           {
@@ -180,12 +186,21 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
             content: (
               <EventParticipantsBlock
                 eventId={id}
+                eventTitle={data.title}
                 currency={data.currency}
                 participations={data.participations}
               />
             ),
           },
         ]}
+      />
+      <ExportDialog
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        context="event-details"
+        eventId={id}
+        eventTitle={data.title}
+        participantCount={data.participations.length}
       />
     </div>
   );

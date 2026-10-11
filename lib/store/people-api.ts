@@ -8,6 +8,7 @@ export interface Person {
   firstName: string;
   middleName: string | null;
   phone: string | null;
+  birthDate: string | null;
   gender: Gender | null;
   birthPlace: string | null;
   registrationAddress: string | null;
@@ -75,6 +76,7 @@ export interface PersonInput {
   firstName: string;
   middleName?: string;
   phone?: string;
+  birthDate?: string | null;
   gender?: Gender;
   birthPlace?: string;
   registrationAddress?: string;

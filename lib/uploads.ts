@@ -1,11 +1,39 @@
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rename, lstat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { extname, join, resolve } from 'node:path';
+import { extname, resolve, dirname, relative } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { fileTypeFromBuffer } from 'file-type';
 import sharp from 'sharp';
+import { uploadsDirectory } from './storage/paths';
+import { encodeAttachment, decodeAttachment } from './storage/vault';
 
-export const UPLOADS_DIR = resolve(process.env.UPLOADS_DIR ?? './uploads');
+export let UPLOADS_DIR = uploadsDirectory();
+export function getUploadsDir() { return UPLOADS_DIR = uploadsDirectory(); }
+export function safeAttachmentPath(rel: string) {
+  const normalized = rel.replaceAll('\\', '/');
+  if (!normalized || normalized.startsWith('/') || normalized.includes('\0') || normalized.split('/').some(p => !p || p === '.' || p === '..' || p.includes(':'))) throw new Error('Недопустимый путь вложения');
+  const root = getUploadsDir(), full = resolve(root, normalized);
+  if (relative(root, full).startsWith('..')) throw new Error('Недопустимый путь вложения');
+  return { normalized, root, full };
+}
+async function assertSafeParents(full: string, root: string) {
+  for (let p = dirname(full); p !== dirname(root); p = dirname(p)) {
+    const info = await lstat(p).catch((e: NodeJS.ErrnoException) => { if (e.code === 'ENOENT') return null; throw e; });
+    if (info?.isSymbolicLink() || (info && !info.isDirectory())) throw new Error('Недопустимый путь вложения');
+    if (p === root) break;
+  }
+}
+export async function writeScanFile(rel: string, value: Buffer) {
+  const { normalized, full, root } = safeAttachmentPath(rel);
+  await assertSafeParents(full, root); await mkdir(dirname(full), { recursive: true });
+  if (existsSync(full)) {
+    const current = await readScanFile(normalized);
+    if (!current.equals(value)) throw new Error('Файл с этим идентификатором уже имеет другое содержимое');
+    return;
+  }
+  const tmp = `${full}.${randomUUID()}.tmp`;
+  await writeFile(tmp, encodeAttachment(value, normalized), { mode: 0o600, flag: 'wx' });
+  await rename(tmp, full);
+}
 export const MAX_UPLOAD_BYTES = (Number(process.env.MAX_UPLOAD_MB ?? '10')) * 1024 * 1024;
 
 export const ALLOWED_MIME = new Set<string>([
@@ -23,12 +51,13 @@ export const EXT_BY_MIME: Record<string, string> = {
 };
 
 export async function ensureUploadsDir() {
+  getUploadsDir();
   if (!existsSync(UPLOADS_DIR)) await mkdir(UPLOADS_DIR, { recursive: true });
 }
 
 export async function ensurePersonDir(personId: string) {
   await ensureUploadsDir();
-  const dir = join(UPLOADS_DIR, personId);
+  const dir = safeAttachmentPath(`${personId}/placeholder`).full.replace(/[/\\]placeholder$/, '');
   if (!existsSync(dir)) await mkdir(dir, { recursive: true });
   return dir;
 }
@@ -37,6 +66,7 @@ export async function saveScanFile(personId: string, originalName: string, buffe
   if (buffer.length > MAX_UPLOAD_BYTES) {
     throw new Error(`Файл больше ${process.env.MAX_UPLOAD_MB ?? 10} МБ`);
   }
+  const { fileTypeFromBuffer } = await import('file-type');
   const sniff = await fileTypeFromBuffer(buffer);
   const mime = sniff?.mime;
   if (!mime || !ALLOWED_MIME.has(mime)) {
@@ -45,18 +75,17 @@ export async function saveScanFile(personId: string, originalName: string, buffe
 
   const id = randomUUID();
   const ext = EXT_BY_MIME[mime] ?? extname(originalName) ?? '';
-  const relPath = join(personId, `${id}${ext}`);
-  const abs = join(UPLOADS_DIR, relPath);
+  const relPath = `${personId}/${id}${ext}`;
   await ensurePersonDir(personId);
-  await writeFile(abs, buffer);
+  await writeScanFile(relPath, buffer);
 
   let thumbRel: string | null = null;
   if (mime.startsWith('image/')) {
     const thumbName = `${id}.thumb.webp`;
-    const thumbAbs = join(UPLOADS_DIR, personId, thumbName);
     try {
-      await sharp(buffer).rotate().resize({ width: 480, withoutEnlargement: true }).webp({ quality: 72 }).toFile(thumbAbs);
-      thumbRel = join(personId, thumbName);
+      const thumb = await sharp(buffer).rotate().resize({ width: 480, withoutEnlargement: true }).webp({ quality: 72 }).toBuffer();
+      thumbRel = `${personId}/${thumbName}`;
+      await writeScanFile(thumbRel, thumb);
     } catch {
       thumbRel = null;
     }
@@ -74,17 +103,14 @@ export async function saveScanFile(personId: string, originalName: string, buffe
 }
 
 export async function readScanFile(relPath: string): Promise<Buffer> {
-  return readFile(join(UPLOADS_DIR, relPath));
+  const { normalized, full, root } = safeAttachmentPath(relPath);
+  await assertSafeParents(full, root);
+  if ((await lstat(full)).isSymbolicLink()) throw new Error('Недопустимый файл вложения');
+  return decodeAttachment(await readFile(full), normalized);
 }
 
 export async function deleteScanFile(relPath: string, thumbPath: string | null) {
-  await Promise.all(
-    [relPath, thumbPath].filter((x): x is string => !!x).map(async (p) => {
-      try {
-        await unlink(join(UPLOADS_DIR, p));
-      } catch {
-        /* ignore */
-      }
-    }),
-  );
+  // Keep immutable objects while offline peers may need their prior versions.
+  safeAttachmentPath(relPath);
+  if (thumbPath) safeAttachmentPath(thumbPath);
 }

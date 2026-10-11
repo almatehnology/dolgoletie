@@ -1,9 +1,11 @@
+import { requireUser } from '@/lib/auth/guards';
 import { NextResponse, type NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { apiError, handlePrismaError, parseJson, toOptionalDate } from '@/lib/api-helpers';
 import { personUpdateSchema } from '@/lib/validators';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try { await requireUser(); } catch (error) { if (error instanceof Response) return error; throw error; }
   const { id } = await params;
   const person = await prisma.person.findUnique({
     where: { id },
@@ -20,6 +22,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try { await requireUser(); } catch (error) { if (error instanceof Response) return error; throw error; }
   const { id } = await params;
   const parsed = await parseJson(req, personUpdateSchema);
   if (!parsed.ok) return parsed.response;
@@ -32,6 +35,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(d.firstName !== undefined && { firstName: d.firstName }),
         ...(d.middleName !== undefined && { middleName: d.middleName ?? null }),
         ...(d.phone !== undefined && { phone: d.phone ?? null }),
+        ...(d.birthDate !== undefined && { birthDate: d.birthDate }),
         ...(d.gender !== undefined && { gender: d.gender ?? null }),
         ...(d.birthPlace !== undefined && { birthPlace: d.birthPlace ?? null }),
         ...(d.registrationAddress !== undefined && { registrationAddress: d.registrationAddress ?? null }),
@@ -57,6 +61,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try { await requireUser(); } catch (error) { if (error instanceof Response) return error; throw error; }
   const { id } = await params;
   try {
     await prisma.person.update({

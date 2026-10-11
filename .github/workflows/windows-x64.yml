@@ -1,0 +1,234 @@
+name: Windows x64 portability
+
+# Bounded audit: dispatch manually after the parent changes are committed.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-x64-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-x64:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CI: 'true'
+      NEXT_TELEMETRY_DISABLED: '1'
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      COOKIE_SECURE: 'false'
+      APP_PASSWORD: ''
+      SESSION_SECRET: windows-ci-synthetic-session-secret-not-for-production
+      CI_EVIDENCE_DIR: ${{ runner.temp }}/traveldatabase-windows-evidence
+      CI_TEMP_ROOT: ${{ runner.temp }}/traveldatabase-windows-temp
+
+    steps:
+      - name: Clean checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          clean: true
+          persist-credentials: false
+
+      - name: Set up Node 24 x64
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          architecture: x64
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Set isolated CI paths and record toolchain
+        id: environment
+        run: |
+          New-Item -ItemType Directory -Force $env:CI_EVIDENCE_DIR, $env:CI_TEMP_ROOT | Out-Null
+          $data = Join-Path $env:CI_TEMP_ROOT 'data'
+          $uploads = Join-Path $env:CI_TEMP_ROOT 'uploads'
+          New-Item -ItemType Directory -Force $data, $uploads | Out-Null
+          $database = Join-Path $data 'ci.db'
+          $databaseUrl = & node -e 'console.log(require("node:url").pathToFileURL(process.argv[1]).href)' $database
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          @(
+            "DATA_DIR=$data"
+            "UPLOADS_DIR=$uploads"
+            "DATABASE_URL=$databaseUrl"
+            "AUTH_FILE=$(Join-Path $data 'auth.json')"
+            "TEMP=$env:CI_TEMP_ROOT"
+            "TMP=$env:CI_TEMP_ROOT"
+          ) | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & node -e 'const fs=require("node:fs"),assert=require("node:assert/strict"),crypto=require("node:crypto"); assert.equal(process.platform,"win32"); assert.equal(process.arch,"x64"); assert.equal(process.versions.node.split(".")[0],"24"); console.log(JSON.stringify({platform:process.platform,arch:process.arch,node:process.version,versions:process.versions,commit:process.env.GITHUB_SHA,lockSha256:crypto.createHash("sha256").update(fs.readFileSync("package-lock.json")).digest("hex")},null,2))' | Tee-Object -FilePath "$env:CI_EVIDENCE_DIR/toolchain.json"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & npm --version | Tee-Object -FilePath "$env:CI_EVIDENCE_DIR/npm-version.txt"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Install pinned lock including Electron binary
+        id: install
+        timeout-minutes: 15
+        run: |
+          # Never skip Electron in this desktop job, including with a truthy "0".
+          Remove-Item Env:ELECTRON_SKIP_BINARY_DOWNLOAD -ErrorAction SilentlyContinue
+          Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+          & npm ci --no-audit --no-fund 2>&1 | Tee-Object -FilePath "$env:CI_EVIDENCE_DIR/install.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & node -e 'const fs=require("node:fs"),assert=require("node:assert/strict"),crypto=require("node:crypto"),path=require("node:path"),toolchain=JSON.parse(fs.readFileSync(path.join(process.env.CI_EVIDENCE_DIR,"toolchain.json"),"utf8")); assert.equal(crypto.createHash("sha256").update(fs.readFileSync("package-lock.json")).digest("hex"),toolchain.lockSha256); const executable=require("electron"); assert.ok(fs.existsSync(executable),"Electron binary was not downloaded"); console.log(JSON.stringify({electron:require("electron/package.json").version,executable},null,2))' | Tee-Object -FilePath "$env:CI_EVIDENCE_DIR/electron-install.json"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Generate Prisma client
+        id: prisma
+        run: |
+          & npm run prisma:generate 2>&1 | Tee-Object -FilePath "$env:CI_EVIDENCE_DIR/prisma-generate.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Full CLI test suite with explicit file enumeration
+        id: tests
+        # Keep collecting runtime/package evidence, then fail the explicit gate.
+        continue-on-error: true
+        timeout-minutes: 20
+        run: |
+          & node scripts/run-tests.cjs --list | Tee-Object -FilePath "$env:CI_EVIDENCE_DIR/test-files.txt"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & node scripts/run-tests.cjs --test-reporter=tap --test-concurrency=1 2>&1 | Tee-Object -FilePath "$env:CI_EVIDENCE_DIR/unit-tests.tap"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Typecheck
+        id: typecheck
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.prisma.outcome == 'success' }}
+        run: |
+          & npm run typecheck 2>&1 | Tee-Object -FilePath "$env:CI_EVIDENCE_DIR/typecheck.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build fresh Next standalone on Windows
+        id: build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.prisma.outcome == 'success' }}
+        timeout-minutes: 15
+        run: |
+          & npm run build 2>&1 | Tee-Object -FilePath "$env:CI_EVIDENCE_DIR/build.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Prepare Windows desktop resources
+        id: prepare
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          & npm run desktop:prepare 2>&1 | Tee-Object -FilePath "$env:CI_EVIDENCE_DIR/prepare.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Hidden Electron source runtime acceptance
+        id: acceptance
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        timeout-minutes: 8
+        run: |
+          # Harness installs hidden-window and native-dialog stubs before main.
+          # No --start-setup workaround: test the actual production startup path.
+          & node e2e/desktop-run.cjs 2>&1 | Tee-Object -FilePath "$env:CI_EVIDENCE_DIR/desktop-acceptance.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Collect hidden acceptance evidence
+        id: desktop_evidence
+        if: ${{ always() }}
+        run: |
+          $log = Join-Path $env:CI_EVIDENCE_DIR 'desktop-acceptance.log'
+          if (!(Test-Path -LiteralPath $log)) { exit 0 }
+          $roots = @(Select-String -LiteralPath $log -Pattern '^DESKTOP_QA_ARTIFACTS=(.+)$' | ForEach-Object { $_.Matches[0].Groups[1].Value.Trim() } | Select-Object -Unique)
+          $prefix = [IO.Path]::GetFullPath($env:CI_TEMP_ROOT).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+          $index = 0
+          foreach ($root in $roots) {
+            $root = [IO.Path]::GetFullPath($root)
+            if (!$root.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { throw 'Acceptance artifacts escaped the isolated CI temp root' }
+            $destination = Join-Path $env:CI_EVIDENCE_DIR "desktop-$index"
+            New-Item -ItemType Directory -Force $destination | Out-Null
+            # Copy only reports/screenshots, never app-data, fixtures or databases.
+            foreach ($file in @('evidence.json', 'electron.log')) {
+              $source = Join-Path $root $file
+              if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination $destination }
+            }
+            $screenshots = Join-Path $root 'screenshots'
+            if (Test-Path -LiteralPath $screenshots) {
+              $images = Join-Path $destination 'screenshots'
+              New-Item -ItemType Directory -Force $images | Out-Null
+              Get-ChildItem -LiteralPath $screenshots -Filter '*.png' -File | Copy-Item -Destination $images
+            }
+            "path=$(Join-Path $destination 'evidence.json')" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            $index++
+          }
+
+      - name: Require actual Windows x64 native runtime evidence
+        id: native_evidence
+        if: ${{ !cancelled() && steps.acceptance.outcome == 'success' }}
+        env:
+          DESKTOP_EVIDENCE_PATH: ${{ steps.desktop_evidence.outputs.path }}
+        run: |
+          & node -e 'const fs=require("node:fs"),assert=require("node:assert/strict"); const e=JSON.parse(fs.readFileSync(process.env.DESKTOP_EVIDENCE_PATH,"utf8")); assert.equal(e.status,"passed"); assert.equal(e.platform,"win32"); assert.equal(e.arch,"x64"); assert.equal(e.launch.visible,false); const r=e.launch.runtime; assert.equal(r.platform,"win32"); assert.equal(r.arch,"x64"); for(const name of ["better-sqlite3-multiple-ciphers","argon2","sharp","@prisma/client"]) assert.ok(r.packages[name],name); assert.ok(r.nativeBindings.length>=3,"Native bindings were not loaded in Electron utilityProcess"); console.log(JSON.stringify({status:e.status,buildId:e.buildId,runtime:r,shutdown:e.checks.shutdown},null,2))' | Tee-Object -FilePath "$env:CI_EVIDENCE_DIR/windows-native-runtime.json"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Package Windows x64 directory without publishing
+        id: package_dir
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        timeout-minutes: 10
+        run: |
+          & node node_modules/electron-builder/cli.js --config desktop/electron-builder.cjs --win --x64 --dir --publish never 2>&1 | Tee-Object -FilePath "$env:CI_EVIDENCE_DIR/package-dir.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Package Windows x64 NSIS without publishing or installing
+        id: nsis
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        timeout-minutes: 10
+        run: |
+          & node node_modules/electron-builder/cli.js --config desktop/electron-builder.cjs --win nsis --x64 --publish never 2>&1 | Tee-Object -FilePath "$env:CI_EVIDENCE_DIR/package-nsis.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify final packaged resources
+        id: verify_package
+        if: ${{ !cancelled() && (steps.package_dir.outcome == 'success' || steps.nsis.outcome == 'success') }}
+        run: |
+          & node desktop/verify-package.cjs desktop/dist/win-unpacked/resources 2>&1 | Tee-Object -FilePath "$env:CI_EVIDENCE_DIR/package-verification.json"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-ChildItem -Path desktop/dist -File | ForEach-Object {
+            [PSCustomObject]@{ file = $_.Name; bytes = $_.Length; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
+          } | ConvertTo-Json -Depth 3 | Set-Content -Path "$env:CI_EVIDENCE_DIR/package-files.json" -Encoding utf8
+
+      - name: Record outcomes and remaining acceptance limits
+        if: ${{ always() }}
+        env:
+          STEP_OUTCOMES: ${{ toJSON(steps) }}
+        run: |
+          New-Item -ItemType Directory -Force $env:CI_EVIDENCE_DIR | Out-Null
+          $env:STEP_OUTCOMES | Set-Content -Path "$env:CI_EVIDENCE_DIR/step-outcomes.json" -Encoding utf8
+          $summary = @'
+          Windows x64 audit uses a clean checkout, Node 24, npm ci and target-native resources.
+          All tests/*.test.ts and desktop/*.test.cjs files are enumerated in one run; failures are enforced by the final gate.
+          Hidden source acceptance exercises Electron utilityProcess native drivers and records runtime paths/ABI.
+          Packaged Windows e2e is pending: the existing --packaged runner accepts only a macOS .app.
+          NSIS creation does not prove install/uninstall/update, signing, physical dialogs, lock/suspend or removable-media behavior.
+          No package is published. Application outputs are uploaded only after successful NSIS and package verification.
+          '@
+          $summary | Set-Content -Path "$env:CI_EVIDENCE_DIR/acceptance-limits.txt" -Encoding utf8
+          $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Upload logs and runtime evidence on success or failure
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-x64-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/traveldatabase-windows-evidence/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload verified Windows directory and NSIS outputs
+        if: ${{ always() && steps.nsis.outcome == 'success' && steps.verify_package.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-x64-packages-${{ github.run_id }}-${{ github.run_attempt }}
+          path: desktop/dist/
+          include-hidden-files: true
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+      - name: Fail job when the full CLI test suite failed
+        if: ${{ !cancelled() && steps.tests.outcome == 'failure' }}
+        run: throw 'The full Windows CLI test suite failed. See unit-tests.tap; runtime/packaging evidence does not override this failure.'

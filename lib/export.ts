@@ -1,9 +1,9 @@
 import archiver from 'archiver';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { PassThrough } from 'node:stream';
+import { Readable } from 'node:stream';
 import { prisma } from './db';
-import { UPLOADS_DIR } from './uploads';
+import { readScanFile } from './uploads';
+import { encodeVaultBundle } from './crypto/bundle';
+import { vaultEncryptionEnabled } from './storage/vault';
 
 export type ExportScope = 'full' | 'people' | 'events';
 
@@ -14,34 +14,47 @@ export interface ExportManifest {
   counts: { people: number; events: number; participations: number; scans: number };
 }
 
-export async function buildExportZip(scope: ExportScope): Promise<{ stream: NodeJS.ReadableStream; filename: string }> {
+/** The API holds withAuthOperation while reading and sealing the backup. */
+export async function buildExportZip(scope: ExportScope): Promise<{ stream: Readable; filename: string; contentType: string }> {
   const includePeople = scope === 'full' || scope === 'people';
   const includeEvents = scope === 'full' || scope === 'events';
 
-  const people = includePeople
-    ? await prisma.person.findMany({
-        include: { scans: true, participations: includeEvents ? true : { where: { event: { deletedAt: null } } } },
-      })
-    : [];
+  // Capture the rows and immutable attachment contents from one database snapshot.
+  const { people, events, participations, scans, files } = await prisma.$transaction(async (tx) => {
+    const people = includePeople
+      ? await tx.person.findMany({
+          include: { scans: true, participations: includeEvents ? true : { where: { event: { deletedAt: null } } } },
+        })
+      : [];
 
-  const events = includeEvents
-    ? await prisma.event.findMany({
-        include: { excursions: true, participations: includePeople ? true : false },
-      })
-    : [];
+    const events = includeEvents
+      ? await tx.event.findMany({
+          include: { excursions: true, participations: includePeople ? true : false },
+        })
+      : [];
 
-  const participations =
-    includePeople && includeEvents
-      ? await prisma.participation.findMany()
-      : includePeople
-        ? []
-        : includeEvents
-          ? []
-          : [];
+    const participations =
+      includePeople && includeEvents
+        ? await tx.participation.findMany()
+        : [];
 
-  const scans = includePeople
-    ? await prisma.passportScan.findMany()
-    : [];
+    const scans = includePeople
+      ? await tx.passportScan.findMany()
+      : [];
+
+    const files = new Map<string, Buffer>();
+    for (const scan of scans) {
+      for (const path of [scan.storedPath, scan.thumbPath]) {
+        if (!path) continue;
+        const name = `uploads/${path.replaceAll('\\', '/')}`;
+        if (!files.has(name)) {
+          try { files.set(name, await readScanFile(path)); }
+          catch { throw new Error('Не удалось прочитать вложение резервной копии. Проверьте наличие и целостность файлов.'); }
+        }
+      }
+    }
+    return { people, events, participations, scans, files };
+  });
 
   const manifest: ExportManifest = {
     version: 1,
@@ -55,34 +68,29 @@ export async function buildExportZip(scope: ExportScope): Promise<{ stream: Node
     },
   };
 
-  const pt = new PassThrough();
   const archive = archiver('zip', { zlib: { level: 6 } });
-  archive.on('warning', (err) => console.warn('[export]', err));
-  archive.on('error', (err) => pt.destroy(err));
-  archive.pipe(pt);
+  const chunks: Buffer[] = [];
+  const complete = new Promise<Buffer>((resolve, reject) => {
+    archive.on('data', (chunk: Buffer) => chunks.push(chunk));
+    archive.once('end', () => resolve(Buffer.concat(chunks)));
+    archive.once('error', reject);
+    archive.once('warning', reject);
+  });
 
   archive.append(JSON.stringify(manifest, null, 2), { name: 'manifest.json' });
   archive.append(JSON.stringify(people, null, 2), { name: 'people.json' });
   archive.append(JSON.stringify(events, null, 2), { name: 'events.json' });
   archive.append(JSON.stringify(participations, null, 2), { name: 'participations.json' });
 
-  if (includePeople) {
-    for (const s of scans) {
-      const abs = join(UPLOADS_DIR, s.storedPath);
-      if (existsSync(abs)) {
-        archive.file(abs, { name: `uploads/${s.storedPath}` });
-      }
-      if (s.thumbPath) {
-        const thumbAbs = join(UPLOADS_DIR, s.thumbPath);
-        if (existsSync(thumbAbs)) {
-          archive.file(thumbAbs, { name: `uploads/${s.thumbPath}` });
-        }
-      }
-    }
-  }
-
-  archive.finalize();
+  for (const [name, file] of files) archive.append(file, { name });
+  const [, zip] = await Promise.all([archive.finalize(), complete]);
+  const encrypted = vaultEncryptionEnabled();
+  const buffer = encrypted ? await encodeVaultBundle(zip) : zip;
 
   const date = new Date().toISOString().slice(0, 10);
-  return { stream: pt, filename: `dolgoletie-${scope}-${date}.zip` };
+  return {
+    stream: Readable.from([buffer]),
+    filename: `dolgoletie-${scope}-${date}.${encrypted ? 'tdbbackup' : 'zip'}`,
+    contentType: encrypted ? 'application/octet-stream' : 'application/zip',
+  };
 }

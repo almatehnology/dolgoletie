@@ -1,9 +1,11 @@
+import { requireUser } from '@/lib/auth/guards';
 import { NextResponse, type NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { handlePrismaError, parseJson, toOptionalDate, toOptionalDecimal } from '@/lib/api-helpers';
 import { eventCreateSchema } from '@/lib/validators';
 
 export async function GET(req: NextRequest) {
+  try { await requireUser(); } catch (error) { if (error instanceof Response) return error; throw error; }
   const url = req.nextUrl;
   const q = url.searchParams.get('q')?.trim() ?? '';
   const from = url.searchParams.get('from');
@@ -41,6 +43,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  try { await requireUser(); } catch (error) { if (error instanceof Response) return error; throw error; }
   const parsed = await parseJson(req, eventCreateSchema);
   if (!parsed.ok) return parsed.response;
   const d = parsed.data;

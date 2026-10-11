@@ -1,5 +1,8 @@
 node_modules
 .next
+.next-qa*
+desktop/stage/
+desktop/dist/
 out
 dist
 .DS_Store
@@ -9,6 +12,14 @@ dist
 /uploads/
 *.db
 *.db-journal
+*.db-wal
+*.db-shm
+.env
+.env.*
+!.env.example
+tsconfig.tsbuildinfo
+playwright-report/
+test-results/
 
 # Prisma
 prisma/migrations/dev.db*

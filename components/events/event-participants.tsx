@@ -3,6 +3,7 @@
 import { Button, Modal } from '@heroui/react';
 import Link from 'next/link';
 import { useState } from 'react';
+import { ExportDialog } from '@/components/export-dialog';
 import { Field } from '@/components/form-field';
 import { FullScreenModal } from '@/components/full-screen-modal';
 import { PaymentStatusChip } from '@/components/participations/payment-status-chip';
@@ -19,22 +20,29 @@ import { formatDate, formatMoney, fullName } from '@/lib/format';
 
 interface Props {
   eventId: string;
+  eventTitle?: string;
   currency: Currency;
   participations: ParticipationWithPerson[];
 }
 
-export function EventParticipantsBlock({ eventId, currency, participations }: Props) {
+export function EventParticipantsBlock({ eventId, eventTitle, currency, participations }: Props) {
   const [addOpen, setAddOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [editing, setEditing] = useState<ParticipationWithPerson | null>(null);
   const [removeParticipation] = useRemoveParticipationMutation();
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-default-500">Участников: {participations.length}</p>
-        <Button variant="primary" onPress={() => setAddOpen(true)}>
-          Добавить участника
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onPress={() => setExportOpen(true)}>
+            Экспортировать участников ({participations.length})
+          </Button>
+          <Button variant="primary" onPress={() => setAddOpen(true)}>
+            Добавить участника
+          </Button>
+        </div>
       </div>
 
       {participations.length === 0 ? (
@@ -103,6 +111,14 @@ export function EventParticipantsBlock({ eventId, currency, participations }: Pr
         participation={editing}
         eventId={eventId}
         onClose={() => setEditing(null)}
+      />
+      <ExportDialog
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        context="event-participants"
+        eventId={eventId}
+        eventTitle={eventTitle}
+        participantCount={participations.length}
       />
     </div>
   );

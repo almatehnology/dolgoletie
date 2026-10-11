@@ -29,6 +29,7 @@ export function PersonForm({ initial, mode, submitting, fieldErrors, onSubmit, o
   const [firstName, setFirstName] = useState(initial?.firstName ?? '');
   const [middleName, setMiddleName] = useState(initial?.middleName ?? '');
   const [phone, setPhone] = useState(initial?.phone ?? '');
+  const [birthDate, setBirthDate] = useState(initial?.birthDate ?? '');
   const [gender, setGender] = useState<Gender | ''>(initial?.gender ?? '');
   const [birthPlace, setBirthPlace] = useState(initial?.birthPlace ?? '');
   const [registrationAddress, setRegistrationAddress] = useState(initial?.registrationAddress ?? '');
@@ -53,6 +54,7 @@ export function PersonForm({ initial, mode, submitting, fieldErrors, onSubmit, o
       firstName: firstName.trim(),
       middleName: middleName.trim() || undefined,
       phone: phone.trim() || undefined,
+      birthDate: birthDate || (mode === 'edit' ? null : undefined),
       gender: gender || undefined,
       birthPlace: birthPlace.trim() || undefined,
       registrationAddress: registrationAddress.trim() || undefined,
@@ -78,6 +80,7 @@ export function PersonForm({ initial, mode, submitting, fieldErrors, onSubmit, o
           <Field label="Имя" value={firstName} onChange={setFirstName} isRequired error={pickError('firstName')} autoComplete="given-name" />
           <Field label="Отчество" value={middleName} onChange={setMiddleName} error={pickError('middleName')} autoComplete="additional-name" />
           <Field label="Телефон" value={phone} onChange={setPhone} placeholder="+7 900 000-00-00" error={pickError('phone')} inputMode="tel" autoComplete="tel" />
+          <DatePickerField label="Дата рождения" value={birthDate} onChange={setBirthDate} error={pickError('birthDate')} />
           <Field
             label="Серия и номер паспорта"
             value={passportNumber}

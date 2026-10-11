@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isCalendarDate } from './person-fields';
 
 const optionalString = z
   .string()
@@ -72,6 +73,7 @@ export const personCreateSchema = z.object({
   firstName: z.string().trim().min(1, 'Имя обязательно'),
   middleName: optionalString,
   phone: optionalString,
+  birthDate: z.string().refine(isCalendarDate, 'Некорректная дата рождения').nullable().optional(),
   gender: genderSchema.optional(),
   birthPlace: optionalString,
   registrationAddress: optionalString,

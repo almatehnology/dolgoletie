@@ -1,9 +1,11 @@
+import { requireUser } from '@/lib/auth/guards';
 import { NextResponse, type NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { handlePrismaError, parseJson, toOptionalDate } from '@/lib/api-helpers';
 import { personCreateSchema } from '@/lib/validators';
 
 export async function GET(req: NextRequest) {
+  try { await requireUser(); } catch (error) { if (error instanceof Response) return error; throw error; }
   const url = req.nextUrl;
   const q = url.searchParams.get('q')?.trim() ?? '';
   const archived = url.searchParams.get('archived') === 'true';
@@ -42,6 +44,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  try { await requireUser(); } catch (error) { if (error instanceof Response) return error; throw error; }
   const parsed = await parseJson(req, personCreateSchema);
   if (!parsed.ok) return parsed.response;
   const d = parsed.data;
@@ -53,6 +56,7 @@ export async function POST(req: NextRequest) {
         firstName: d.firstName,
         middleName: d.middleName ?? null,
         phone: d.phone ?? null,
+        birthDate: d.birthDate ?? null,
         gender: d.gender ?? null,
         birthPlace: d.birthPlace ?? null,
         registrationAddress: d.registrationAddress ?? null,

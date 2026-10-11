@@ -1,9 +1,11 @@
+import { requireUser } from '@/lib/auth/guards';
 import { NextResponse, type NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { handlePrismaError, parseJson, toOptionalDecimal } from '@/lib/api-helpers';
 import { participationCreateSchema } from '@/lib/validators';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try { await requireUser(); } catch (error) { if (error instanceof Response) return error; throw error; }
   const { id: eventId } = await params;
   const parsed = await parseJson(req, participationCreateSchema);
   if (!parsed.ok) return parsed.response;

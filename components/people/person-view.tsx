@@ -39,6 +39,7 @@ export function PersonView({ person }: Props) {
   return (
     <div className="flex flex-col gap-5">
       <Section title="ФИО и личные данные">
+        <Row label="Дата рождения" value={person.birthDate ? person.birthDate.split('-').reverse().join('.') : null} />
         <Row label="Фамилия" value={person.lastName} />
         <Row label="Имя" value={person.firstName} />
         <Row label="Отчество" value={person.middleName} />

@@ -1,9 +1,7 @@
-import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { Readable } from 'node:stream';
 import unzipper from 'unzipper';
 import { prisma } from './db';
-import { UPLOADS_DIR } from './uploads';
+import { writeScanFile } from './uploads';
+import { decodeVaultBundle } from './crypto/bundle';
 
 export type ImportMode = 'merge' | 'replace';
 
@@ -19,6 +17,7 @@ interface ImportInput {
   zipBuffer: Buffer;
   mode: ImportMode;
   dryRun: boolean;
+  password?: string;
 }
 
 interface RawScan {
@@ -38,6 +37,7 @@ interface RawPerson {
   firstName: string;
   middleName: string | null;
   phone: string | null;
+  birthDate?: string | null;
   gender: string | null;
   birthPlace: string | null;
   registrationAddress: string | null;
@@ -167,14 +167,18 @@ export async function planImport({ zipBuffer }: { zipBuffer: Buffer }): Promise<
     else plan.events.toCreate++;
   }
 
-  for (const p of bundle.participations) {
+  for (const _p of bundle.participations) {
     plan.participations.toCreate++;
   }
 
   return plan;
 }
 
-export async function executeImport({ zipBuffer, mode, dryRun }: ImportInput) {
+export async function executeImport({ zipBuffer, mode, dryRun, password }: ImportInput) {
+  const decoded = await decodeVaultBundle(zipBuffer, password);
+  decoded.access?.root?.fill(0);
+  if (decoded.access) { decoded.access.root = undefined; decoded.access.password = undefined; }
+  zipBuffer = decoded.payload;
   const bundle = await readBundle(zipBuffer);
   if (dryRun) {
     return planImport({ zipBuffer });
@@ -204,6 +208,7 @@ export async function executeImport({ zipBuffer, mode, dryRun }: ImportInput) {
           firstName: raw.firstName,
           middleName: raw.middleName,
           phone: raw.phone,
+          ...(raw.birthDate !== undefined && { birthDate: raw.birthDate }),
           gender: raw.gender ?? null,
           birthPlace: raw.birthPlace ?? null,
           registrationAddress: raw.registrationAddress ?? null,
@@ -230,15 +235,11 @@ export async function executeImport({ zipBuffer, mode, dryRun }: ImportInput) {
             const srcPath = scan.storedPath;
             const data = bundle.uploadFiles.get(srcPath);
             if (!data) continue;
-            const abs = join(UPLOADS_DIR, scan.storedPath);
-            await mkdir(dirname(abs), { recursive: true });
-            await writeFile(abs, data);
+            await writeScanFile(scan.storedPath, data);
             if (scan.thumbPath) {
               const thumbBuf = bundle.uploadFiles.get(scan.thumbPath);
               if (thumbBuf) {
-                const thumbAbs = join(UPLOADS_DIR, scan.thumbPath);
-                await mkdir(dirname(thumbAbs), { recursive: true });
-                await writeFile(thumbAbs, thumbBuf);
+                await writeScanFile(scan.thumbPath, thumbBuf);
               }
             }
             await tx.passportScan.upsert({

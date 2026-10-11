@@ -1,3 +1,4 @@
+import { requireUser } from '@/lib/auth/guards';
 import { NextResponse, type NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { apiError } from '@/lib/api-helpers';
@@ -6,6 +7,7 @@ import { generatePersonPdf } from '@/lib/pdf';
 export const runtime = 'nodejs';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try { await requireUser(); } catch (error) { if (error instanceof Response) return error; throw error; }
   const { id } = await params;
   const person = await prisma.person.findUnique({
     where: { id },

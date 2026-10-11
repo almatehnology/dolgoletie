@@ -1,14 +1,16 @@
 'use client';
 
 import { Button, Card } from '@heroui/react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { Field } from '@/components/form-field';
+import { useAppStore } from '@/lib/store/hooks';
+import { clearClientSession, safeUserDestination, safeAdminDestination } from '@/lib/auth/client';
 
 export function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get('next') ?? '/';
+  const store = useAppStore();
+  const [username, setUsername] = useState(searchParams.get('role') === 'admin' ? 'admin' : '');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,16 +23,19 @@ export function LoginForm() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ username, password }),
       });
       const data = await res.json();
+      clearClientSession(store);
       if (!res.ok) {
         setError(data?.error?.message ?? 'Ошибка входа');
         return;
       }
-      router.push(next);
-      router.refresh();
+      window.location.replace(data.role === 'admin' ? safeAdminDestination(searchParams.get('syncToken')) : safeUserDestination(searchParams.get('next')));
+    } catch {
+      setError('Не удалось связаться с приложением');
     } finally {
+      setPassword('');
       setLoading(false);
     }
   }
@@ -39,13 +44,14 @@ export function LoginForm() {
     <Card className="w-full max-w-sm">
       <Card.Header>
         <Card.Title>Вход в Долголетие</Card.Title>
-        <Card.Description>Введите пароль портала</Card.Description>
+        <Card.Description>Основной пользователь открывает базу. Admin управляет доступом.</Card.Description>
       </Card.Header>
       <Card.Content className="p-6">
         <form className="flex flex-col gap-4" onSubmit={onSubmit}>
-          <Field label="Пароль" value={password} onChange={setPassword} type="password" isRequired autoFocus autoComplete="current-password" />
+          <Field label="Имя пользователя" value={username} onChange={setUsername} isRequired autoFocus autoComplete="username" />
+          <Field label="Пароль" value={password} onChange={setPassword} type="password" isRequired autoComplete="current-password" />
           {error ? <p className="text-sm text-danger">{error}</p> : null}
-          <Button type="submit" variant="primary" isDisabled={!password || loading}>
+          <Button type="submit" variant="primary" isDisabled={!username || !password || loading}>
             {loading ? 'Вход…' : 'Войти'}
           </Button>
         </form>

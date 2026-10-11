@@ -1,10 +1,13 @@
 'use client';
+import Link from 'next/link';
 
 import { Button, Card } from '@heroui/react';
 import { useRef, useState } from 'react';
 import { Field } from '@/components/form-field';
 import { api } from '@/lib/store/api';
 import { useAppDispatch } from '@/lib/store/hooks';
+import { saveLocalFile } from '@/lib/desktop-files';
+import { safeDownloadName } from '@/lib/file-names';
 
 type Scope = 'full' | 'people' | 'events';
 type Mode = 'merge' | 'replace';
@@ -16,6 +19,8 @@ export default function DataPage() {
   const [scope, setScope] = useState<Scope>('full');
   const [mode, setMode] = useState<Mode>('merge');
   const [dryRun, setDryRun] = useState(true);
+  const [backupPassword, setBackupPassword] = useState('');
+  const [exporting, setExporting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<unknown>(null);
@@ -25,17 +30,26 @@ export default function DataPage() {
   const [resetting, setResetting] = useState(false);
   const [resetMsg, setResetMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
-  function downloadExport() {
-    const url = `/api/export?scope=${scope}`;
-    window.location.href = url;
+  async function downloadExport() {
+    setExporting(true); setError(null);
+    try {
+      const response = await fetch(`/api/export?scope=${scope}`, { cache: 'no-store' });
+      if (!response.ok) throw new Error('Не удалось создать резервную копию. Проверьте вход и вложения.');
+      const extension = response.headers.get('content-type')?.includes('zip') ? 'zip' : 'tdbbackup';
+      const encoded = response.headers.get('content-disposition')?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+      const filename = safeDownloadName(encoded ? decodeURIComponent(encoded) : 'dolgoletie-backup', extension);
+      await saveLocalFile(await response.blob(), filename);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Не удалось сохранить копию'); }
+    finally { setExporting(false); }
   }
 
   async function runImport() {
     const file = fileRef.current?.files?.[0];
     if (!file) {
-      setError('Выберите zip-файл');
+      setError('Выберите файл резервной копии ZIP или TDBBACKUP');
       return;
     }
+    if (!dryRun && !confirm('Записи из резервной копии будут добавлены или заменены согласно выбранному режиму. Подтвердить восстановление?')) return;
     setError(null);
     setResult(null);
     setImporting(true);
@@ -44,6 +58,7 @@ export default function DataPage() {
       body.append('file', file);
       body.append('mode', mode);
       body.append('dryRun', String(dryRun));
+      if (backupPassword) body.append('password', backupPassword);
       const res = await fetch('/api/import', { method: 'POST', body });
       const data = await res.json();
       if (!res.ok) {
@@ -52,8 +67,10 @@ export default function DataPage() {
         setResult(data);
         dispatch(api.util.invalidateTags(['People', 'Person', 'Events', 'Event', 'Search']));
       }
-    } finally {
+    } catch { setError('Не удалось восстановить копию. Проверьте файл, пароль и вход.'); }
+    finally {
       setImporting(false);
+      setBackupPassword('');
     }
   }
 
@@ -62,7 +79,7 @@ export default function DataPage() {
       setResetMsg({ kind: 'err', text: `Введите слово ${RESET_CONFIRM} для подтверждения` });
       return;
     }
-    if (!confirm('База будет полностью очищена, включая сканы на диске. Действие необратимо. Продолжить?')) {
+    if (!confirm('Все карточки и мероприятия будут удалены. Удаления будут предложены другим ноутбукам при синхронизации. Продолжить?')) {
       return;
     }
     setResetting(true);
@@ -89,14 +106,15 @@ export default function DataPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">База данных</h1>
+      <div className="flex flex-wrap gap-3"><Link href="/people/import" className="text-primary hover:underline">Пакетная загрузка DOCX / XLSX</Link><Link href="/sync" className="text-primary hover:underline">Синхронизация через файл</Link></div>
       <p className="-mt-4 text-sm text-default-500">
         Экспорт, импорт и полная очистка.
       </p>
 
       <Card>
         <Card.Header>
-          <Card.Title>Экспорт</Card.Title>
-          <Card.Description>Создаёт zip-архив с данными и сканами.</Card.Description>
+          <Card.Title>Резервная копия</Card.Title>
+          <Card.Description>Сохраняет данные и вложения. Если шифрование включено, копия защищается текущим паролем. Для обмена изменениями между ноутбуками используйте синхронизацию.</Card.Description>
         </Card.Header>
         <Card.Content className="flex flex-col gap-3 p-6">
           <div className="flex flex-wrap gap-2">
@@ -111,23 +129,24 @@ export default function DataPage() {
               </Button>
             ))}
           </div>
-          <Button variant="primary" onPress={downloadExport}>
-            Скачать архив
+          <Button variant="primary" isDisabled={exporting} onPress={downloadExport}>
+            {exporting ? 'Подготовка…' : 'Сохранить копию'}
           </Button>
         </Card.Content>
       </Card>
 
       <Card>
         <Card.Header>
-          <Card.Title>Импорт</Card.Title>
+          <Card.Title>Восстановление из резервной копии</Card.Title>
           <Card.Description>
-            Загрузите ранее созданный zip. «Пробный запуск» покажет план без изменений.
+            Выберите ранее созданный ZIP или TDBBACKUP. Пробный запуск покажет количество изменений. Восстановление заменяет совпавшие записи; для проверки каждого поля используйте пакетную загрузку или синхронизацию.
           </Card.Description>
         </Card.Header>
         <Card.Content className="flex flex-col gap-3 p-6">
           <div>
-            <input ref={fileRef} type="file" accept=".zip" />
+            <input ref={fileRef} type="file" accept=".zip,.tdbbackup" />
           </div>
+          <Field label="Пароль копии (если она зашифрована)" type="password" value={backupPassword} onChange={setBackupPassword} autoComplete="off" />
           <div>
             <div className="mb-1 text-sm font-medium">Режим</div>
             <div className="flex gap-2">

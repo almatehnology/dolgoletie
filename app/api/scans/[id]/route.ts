@@ -1,3 +1,4 @@
+import { requireUser } from '@/lib/auth/guards';
 import { NextResponse, type NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { apiError } from '@/lib/api-helpers';
@@ -6,6 +7,7 @@ import { deleteScanFile, readScanFile } from '@/lib/uploads';
 export const runtime = 'nodejs';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try { await requireUser(); } catch (error) { if (error instanceof Response) return error; throw error; }
   const { id } = await params;
   const scan = await prisma.passportScan.findUnique({ where: { id } });
   if (!scan) return apiError('NOT_FOUND', 'Скан не найден', 404);
@@ -19,13 +21,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     headers: {
       'Content-Type': scan.mimeType,
       'Content-Length': String(buf.length),
-      'Cache-Control': 'private, max-age=60',
+      'Cache-Control': 'private, no-store',
       'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(scan.filename)}`,
     },
   });
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try { await requireUser(); } catch (error) { if (error instanceof Response) return error; throw error; }
   const { id } = await params;
   const scan = await prisma.passportScan.findUnique({ where: { id } });
   if (!scan) return apiError('NOT_FOUND', 'Скан не найден', 404);

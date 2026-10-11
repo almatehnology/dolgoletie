@@ -7,3 +7,13 @@ node_modules
 /uploads
 *.db
 *.db-journal
+*.db-wal
+*.db-shm
+.env
+.env.*
+!.env.example
+.next-qa*
+desktop/stage
+desktop/dist
+playwright-report
+test-results

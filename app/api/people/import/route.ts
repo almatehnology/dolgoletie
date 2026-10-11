@@ -1,3 +1,4 @@
+import { requireUser } from '@/lib/auth/guards';
 import { NextResponse, type NextRequest } from 'next/server';
 import { apiError, handlePrismaError, parseJson } from '@/lib/api-helpers';
 import { importPerson, personEnvelopeSchema } from '@/lib/object-export';
@@ -5,6 +6,7 @@ import { importPerson, personEnvelopeSchema } from '@/lib/object-export';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  try { await requireUser(); } catch (error) { if (error instanceof Response) return error; throw error; }
   const parsed = await parseJson(req, personEnvelopeSchema);
   if (!parsed.ok) return parsed.response;
   try {
