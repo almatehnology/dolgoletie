@@ -2,7 +2,8 @@ ARG NODE_VERSION=22-alpine
 
 FROM node:${NODE_VERSION} AS deps
 WORKDIR /app
-RUN apk add --no-cache libc6-compat openssl
+# Native SQLite encryption bindings are compiled during npm ci.
+RUN apk add --no-cache libc6-compat openssl python3 make g++
 COPY package.json package-lock.json* ./
 RUN --mount=type=cache,target=/root/.npm ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci
 

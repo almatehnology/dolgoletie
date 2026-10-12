@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, rmSync, readdirSync, lstatSync } from 'node:fs';
 import { join, resolve, dirname, relative, isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { dataDirectory, databasePath } from './paths';
@@ -32,8 +32,14 @@ export function recoverGenerationTransition(force = false) {
       assertSeparateUploads(uploads, db, join(dataDirectory(), 'vaults', transition.target));
       for (const path of [db, `${db}-wal`, `${db}-shm`]) rmSync(path, { force: true });
       syncDirectory(dirname(db));
-      rmSync(uploads, { recursive: true, force: true });
-      if (existsSync(dirname(uploads))) syncDirectory(dirname(uploads));
+      // Docker bind mounts cannot be removed (EBUSY). Remove the obsolete
+      // plaintext contents while retaining the mount directory itself.
+      if (existsSync(uploads)) {
+        const info = lstatSync(uploads);
+        if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('Недопустимый каталог вложений');
+        for (const entry of readdirSync(uploads)) rmSync(join(uploads, entry), { recursive: true, force: true });
+        syncDirectory(uploads);
+      }
     }
   } else {
     rmSync(join(dataDirectory(), 'vaults', transition.target), { recursive: true, force: true });

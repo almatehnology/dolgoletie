@@ -555,7 +555,7 @@ describe('real auth/vault/sync-access across three isolated installations', { co
       assert.equal((await completed.json() as AccessResult).status, 'applied');
       assert.equal(existsSync(descriptorPath), false);
       assert.equal(existsSync(join(b.dir, 'data.db')), false);
-      assert.equal(existsSync(join(b.dir, 'uploads')), false);
+      assert.deepEqual(await readdir(join(b.dir, 'uploads')), []);
       assert.equal(existsSync(join(b.dir, 'storage-transition.json')), false);
       assert.equal(existsSync(join(b.dir, 'credential-transition.json')), false);
       assert.equal(vault.vaultEncryptionEnabled(), true);
@@ -744,7 +744,7 @@ describe('real auth/vault/sync-access across three isolated installations', { co
       assert.equal(existsSync(credentialMarker), false);
       assert.equal(existsSync(generationMarker), false);
       assert.equal(existsSync(join(a.dir, 'data.db')), false);
-      assert.equal(existsSync(join(a.dir, 'uploads')), false);
+      assert.deepEqual(await readdir(join(a.dir, 'uploads')), []);
       await assert.rejects(prisma.person.findMany(), /заблокировано/);
       await assertLogin(OLD_PASSWORD);
       assert.deepEqual(vault.vaultKey(), root);

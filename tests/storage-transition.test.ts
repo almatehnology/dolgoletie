@@ -1,10 +1,61 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, readdir, access, writeFile, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, readdir, access, writeFile, readFile, mkdir } from 'node:fs/promises';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { wrapPassword, wrapRecovery, createRecoveryCode } from '../lib/crypto/primitives';
+
+test('Docker upload mount survives encryption, interrupted cleanup recovery and subsequent logins', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'tdb-mounted-uploads-'));
+  const uploads = join(dir, 'uploads');
+  process.env.DATA_DIR = dir; process.env.DATABASE_URL = `file:${join(dir, 'data.db')}`;
+  process.env.UPLOADS_DIR = uploads; process.env.AUTH_FILE = join(dir, 'auth.json'); process.env.APP_PASSWORD = '';
+  await mkdir(uploads);
+  const originalRemove = fs.rmSync;
+  const mountGuard = t.mock.method(fs, 'rmSync', (path: Parameters<typeof fs.rmSync>[0], options: Parameters<typeof fs.rmSync>[1]) => {
+    if (String(path) === uploads) throw Object.assign(new Error('Cannot remove mounted directory'), { code: 'EBUSY' });
+    return originalRemove(path, options);
+  });
+  syncBuiltinESMExports();
+  const { createAdmin, createPrimary, authenticateAccount } = await import('../lib/auth/accounts');
+  const { readAuth } = await import('../lib/auth/store');
+  const { accountVersion } = await import('../lib/auth/authorization');
+  const { prepareEncryption, enableEncryption, disableEncryption } = await import('../lib/storage/access-management');
+  const { atomicJson } = await import('../lib/storage/atomic-files');
+  const vault = await import('../lib/storage/vault');
+  const { prisma } = await import('../lib/db');
+  try {
+    await createAdmin('mounted-admin-password');
+    const admin = (await readAuth()).admin!;
+    await createPrimary({ authenticated: true, role: 'admin', userId: admin.id, authVersion: accountVersion(admin) }, 'operator', 'mounted-user-password');
+    const prepared = await prepareEncryption(admin.id, 'mounted-user-password');
+    await enableEncryption(admin.id, 'mounted-user-password', prepared.token, true);
+    assert.equal(vault.readVault().enabled, true);
+    assert.deepEqual(await readdir(uploads), []);
+    // Recreate the pending cleanup left by the old release after a committed switch.
+    await mkdir(join(uploads, 'old-person'));
+    await writeFile(join(uploads, 'old-person', 'document.txt'), 'old plaintext attachment');
+    await writeFile(join(dir, 'data.db'), 'old plaintext database');
+    atomicJson(join(dir, 'storage-transition.json'), { format: 1, source: null, target: vault.readVault().generation });
+    assert.equal((await authenticateAccount('admin', 'mounted-admin-password', vault)).role, 'admin');
+    assert.deepEqual(await readdir(uploads), []);
+    await assert.rejects(access(join(dir, 'data.db')));
+    await assert.rejects(access(join(dir, 'storage-transition.json')));
+    assert.equal((await authenticateAccount('operator', 'mounted-user-password', vault)).role, 'user');
+    assert.equal(await prisma.person.count(), 0);
+    await disableEncryption(prepared.recoveryCode, true);
+    assert.equal((await authenticateAccount('admin', 'mounted-admin-password', vault)).role, 'admin');
+    assert.equal((await authenticateAccount('operator', 'mounted-user-password', vault)).role, 'user');
+    assert.equal(await prisma.person.count(), 0);
+    assert.equal(mountGuard.mock.calls.some(call => String(call.arguments[0]) === uploads), false);
+  } finally {
+    mountGuard.mock.restore(); syncBuiltinESMExports();
+    await vault.vaultLock(); await prisma.$disconnect(); await rm(dir, { recursive: true, force: true });
+  }
+});
 
 test('interrupted generation preparation rolls back, while a durable credential intent completes the generation and removes plaintext', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'tdb-generation-'));
@@ -35,7 +86,7 @@ test('interrupted generation preparation rolls back, while a durable credential 
     assert.equal(readVault().enabled, true);
     assert.equal((await readAuth()).primary!.passwordHash, next.primary!.passwordHash);
     await assert.rejects(access(join(dir, 'data.db')));
-    await assert.rejects(access(join(dir, 'uploads')));
+    assert.deepEqual(await readdir(join(dir, 'uploads')), []);
     await assert.rejects(access(join(dir, 'storage-transition.json')));
     await vaultUnlock(password);
     assert.equal((await prisma.person.findUniqueOrThrow({ where: { id: person.id } })).lastName, 'Сохранённая');
