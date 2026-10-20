@@ -4,7 +4,7 @@ import { sessionIsConfigured, sessionOptions } from '@/lib/auth/session-options'
 import type { SessionData } from '@/lib/auth/types';
 import { isSameOriginRequest, requestOrigin } from '@/lib/auth/request-origin';
 
-const PUBLIC_PATHS = ['/login', '/setup', '/api/setup', '/api/auth/login', '/api/auth/logout', '/api/auth/status'];
+const PUBLIC_PATHS = ['/login', '/setup', '/api/setup', '/api/auth/login', '/api/auth/logout', '/api/auth/status', '/api/auth/activity'];
 const within = (pathname: string, path: string) => pathname === path || pathname.startsWith(`${path}/`);
 
 // Preliminary cookie/role check only. Node guards verify current metadata and vault state.

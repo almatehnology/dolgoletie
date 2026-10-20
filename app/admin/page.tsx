@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/auth/guards';
 import { redirect } from 'next/navigation';
 import { vaultEncryptionEnabled } from '@/lib/storage/vault';
 import { AdminPanel } from './admin-panel';
+import { readSessionSettings } from '@/lib/auth/security-settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,5 +14,5 @@ export default async function AdminPage() {
     throw error;
   }
   const { primary } = await readAuth();
-  return <AdminPanel initialStatus={{ primary: primary ? { username: primary.username, version: primary.version } : null, encryptionEnabled: vaultEncryptionEnabled() }} />;
+  return <AdminPanel initialStatus={{ primary: primary ? { username: primary.username, version: primary.version } : null, encryptionEnabled: vaultEncryptionEnabled(), sessionSettings: readSessionSettings() }} />;
 }

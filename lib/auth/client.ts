@@ -3,6 +3,8 @@
 import { api } from '@/lib/store/api';
 import type { AppStore } from '@/lib/store';
 import { closeSearchModal, dismissToast, hideScans } from '@/lib/store/ui-slice';
+import type { AuthRole } from './types';
+import { SESSION_LEAVING_EVENT } from './activity-monitor';
 
 export function clearClientSession(store: AppStore): void {
   try { window.sessionStorage.removeItem('tdb-batch-import'); window.sessionStorage.removeItem('tdb-batch-import-confirmation'); } catch { /* Storage can be unavailable. */ }
@@ -13,8 +15,14 @@ export function clearClientSession(store: AppStore): void {
   for (const toast of ui.toasts) store.dispatch(dismissToast(toast.id));
 }
 
+export function expireClientSession(store: AppStore, role: AuthRole): void {
+  clearClientSession(store);
+  window.location.replace(role === 'admin' ? '/login?role=admin&expired=1' : '/login?expired=1');
+}
+
 // A full document navigation discards all Redux state and Next's prefetched content.
 export async function leaveAccount(store: AppStore, destination = '/login'): Promise<void> {
+  window.dispatchEvent?.(new Event(SESSION_LEAVING_EVENT));
   try { await fetch('/api/auth/logout', { method: 'POST' }); }
   finally {
     clearClientSession(store);

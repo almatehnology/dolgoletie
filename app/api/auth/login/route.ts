@@ -4,6 +4,8 @@ import * as vault from '@/lib/storage/vault';
 import { authenticateAccount } from '@/lib/auth/accounts';
 import { assertSameOrigin, authError, authFailure, authJson } from '@/lib/auth/errors';
 import { withAuthOperation } from '@/lib/auth/mutex';
+import { sessionRegistry } from '@/lib/auth/session-registry';
+import { readSessionSettings } from '@/lib/auth/security-settings';
 
 const schema = z.object({ username: z.string().trim().min(1).max(80), password: z.string().min(1).max(1024) }).strict();
 
@@ -15,12 +17,15 @@ export async function POST(request: Request) {
     return await withAuthOperation(async () => {
       const session = await getSession();
       session.destroy();
+      sessionRegistry.revoke();
       try {
+        sessionRegistry.configure(readSessionSettings().idleTimeoutMinutes);
         const authenticated = await authenticateAccount(parsed.data.username, parsed.data.password, vault);
-        Object.assign(session, authenticated);
+        Object.assign(session, authenticated, { sessionId: sessionRegistry.register(authenticated) });
         await session.save();
         return authJson({ ok: true, role: authenticated.role, next: authenticated.role === 'admin' ? '/admin' : '/' });
       } catch (error) {
+        sessionRegistry.revoke();
         await vault.vaultLock();
         session.destroy();
         throw error;

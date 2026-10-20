@@ -21,6 +21,7 @@ export interface AuthMetadata {
 }
 
 export interface SessionData {
+  sessionId?: string;
   authenticated?: boolean;
   userId?: string;
   role?: AuthRole;

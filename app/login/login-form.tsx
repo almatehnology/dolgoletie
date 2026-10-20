@@ -48,6 +48,7 @@ export function LoginForm() {
       </Card.Header>
       <Card.Content className="p-6">
         <form className="flex flex-col gap-4" onSubmit={onSubmit}>
+          {searchParams.get('expired') === '1' ? <p role="status" className="text-sm">Сессия завершена. Войдите снова, чтобы продолжить.</p> : null}
           <Field label="Имя пользователя" value={username} onChange={setUsername} isRequired autoFocus autoComplete="username" />
           <Field label="Пароль" value={password} onChange={setPassword} type="password" isRequired autoComplete="current-password" />
           {error ? <p className="text-sm text-danger">{error}</p> : null}

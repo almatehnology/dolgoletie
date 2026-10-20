@@ -4,8 +4,9 @@ import { SyncAccessCompletion } from '@/components/sync-access-completion';
 import { Button, Card } from '@heroui/react';
 import { useState } from 'react';
 import { Field } from '@/components/form-field';
+import type { SessionSettings } from '@/lib/auth/security-settings';
 
-type AdminStatus = { primary: { username: string; version: number } | null; encryptionEnabled: boolean };
+type AdminStatus = { primary: { username: string; version: number } | null; encryptionEnabled: boolean; sessionSettings: SessionSettings };
 type OperationResult = { token?: string; recoveryCode?: string };
 
 async function adminRequest(path: string, body: object): Promise<OperationResult> {
@@ -139,6 +140,34 @@ function EncryptionForm({ enabled, onChanged }: { enabled: boolean; onChanged():
   </form>;
 }
 
+function SessionSettingsForm({ settings, onChanged }: { settings: SessionSettings; onChanged(): Promise<void> }) {
+  const [enabled, setEnabled] = useState(settings.idleTimeoutMinutes !== null);
+  const [minutes, setMinutes] = useState(String(settings.idleTimeoutMinutes ?? 15));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const value = Number(minutes);
+  const valid = !enabled || (Number.isInteger(value) && value >= 1 && value <= 1440);
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!valid) return;
+    setBusy(true); setError(null); setSaved(false);
+    try {
+      await adminRequest('/api/admin/session-settings', { idleTimeoutMinutes: enabled ? value : null });
+      await onChanged(); setSaved(true);
+    } catch (error) { setError(error instanceof Error ? error.message : 'Не удалось сохранить настройку'); }
+    finally { setBusy(false); }
+  }
+  return <form onSubmit={submit} className="flex flex-col gap-4">
+    <p className="text-sm text-default-600">По умолчанию через 15 минут бездействия вход завершается, а зашифрованное хранилище закрывается. Настройка действует для пользователя и admin только на этом устройстве.</p>
+    <label className="flex items-center gap-2"><input type="checkbox" checked={enabled} disabled={busy} onChange={(event) => { setEnabled(event.currentTarget.checked); setSaved(false); }} />Автоматически завершать сессию</label>
+    {enabled ? <label className="flex flex-col gap-2 text-sm">Минуты бездействия (1–1440)<input className="rounded border border-default-300 p-2" type="number" min={1} max={1440} step={1} required disabled={busy} value={minutes} onChange={(event) => { setMinutes(event.currentTarget.value); setSaved(false); }} /></label> : <p className="text-sm">Автоматическое завершение отключено. Закрывайте сессию кнопкой выхода.</p>}
+    {error ? <p role="alert" className="text-sm text-danger">{error}</p> : null}
+    {saved ? <p role="status" className="text-sm">Настройка сохранена.</p> : null}
+    <Button type="submit" variant="primary" isDisabled={busy || !valid}>{busy ? 'Сохранение…' : 'Сохранить таймер'}</Button>
+  </form>;
+}
+
 export function AdminPanel({ initialStatus }: { initialStatus: AdminStatus }) {
   const [status, setStatus] = useState(initialStatus);
   async function refreshStatus() {
@@ -149,6 +178,7 @@ export function AdminPanel({ initialStatus }: { initialStatus: AdminStatus }) {
   }
   return <div className="flex flex-col gap-6">
     <div><h1 className="text-2xl font-semibold">Управление доступом</h1><p className="mt-2 text-sm text-default-600">Admin управляет учётной записью и защитой хранения. Для работы с записями войдите под основным пользователем.</p></div>
+    <Card><Card.Header><Card.Title>Завершение сессии при бездействии</Card.Title></Card.Header><Card.Content className="p-6"><SessionSettingsForm settings={status.sessionSettings} onChanged={refreshStatus} /></Card.Content></Card>
     <Card><Card.Header><Card.Title>Основной пользователь</Card.Title></Card.Header><Card.Content className="p-6">
       {status.primary ? <p>Пользователь: <strong>{status.primary.username}</strong>. Версия доступа: {status.primary.version}.</p> : <CreateUser onCreated={refreshStatus} />}
     </Card.Content></Card>

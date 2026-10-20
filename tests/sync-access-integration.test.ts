@@ -46,6 +46,7 @@ let requestStorage: typeof import('next/dist/server/app-render/work-unit-async-s
 let cookies: typeof import('next/dist/server/web/spec-extension/cookies');
 let iron: typeof import('iron-session');
 let completionRoute: typeof import('../app/api/admin/sync-access/route');
+let sessionRegistry: typeof import('../lib/auth/session-registry').sessionRegistry;
 
 interface Installation { name: 'A' | 'B' | 'C'; dir: string; admin: AdminAccount; adminPassword: string }
 interface Fixture { installs: [Installation, Installation, Installation]; personId: string; scanId: string }
@@ -137,7 +138,10 @@ async function credentials() {
 
 async function adminComplete(token: string, proof: string, recovery = false, incomingPassword?: string, caller?: SessionData) {
   const jar = new cookies.ResponseCookies(new Headers());
-  jar.set('tdb_session', await iron.sealData(caller ?? await session('admin'), { password: SESSION_SECRET }));
+  const identity = caller ?? await session('admin');
+  // Account-service fixtures bypass the HTTP login route, so mint its server ID here.
+  if (!identity.sessionId) identity.sessionId = sessionRegistry.register(identity);
+  jar.set('tdb_session', await iron.sealData(identity, { password: SESSION_SECRET }));
   const work = { isStaticGeneration: false, route: '/api/admin/sync-access', page: '/api/admin/sync-access/route' } as WorkStore;
   const request = { type: 'request', phase: 'action', cookies: jar, userspaceMutableCookies: jar, mutableCookies: jar } as unknown as RequestStore;
   return workStorage.workAsyncStorage.run(work, () => requestStorage.workUnitAsyncStorage.run(request, () => completionRoute.POST(new Request('http://localhost/api/admin/sync-access', {
@@ -235,6 +239,7 @@ describe('real auth/vault/sync-access across three isolated installations', { co
     cookies = await import('next/dist/server/web/spec-extension/cookies');
     iron = await import('iron-session');
     completionRoute = await import('../app/api/admin/sync-access/route');
+    sessionRegistry = (await import('../lib/auth/session-registry')).sessionRegistry;
   });
 
   beforeEach(async () => {

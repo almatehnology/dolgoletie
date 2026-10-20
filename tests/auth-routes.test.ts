@@ -22,6 +22,7 @@ let loginRoute: typeof import('../app/api/auth/login/route');
 let logoutRoute: typeof import('../app/api/auth/logout/route');
 let adminStatus: typeof import('../app/api/admin/status/route');
 let adminUser: typeof import('../app/api/admin/user/route');
+let registry: typeof import('../lib/auth/session-registry');
 let fixture: AuthMetadata;
 const secret = 'synthetic-auth-route-session-secret-32-characters';
 
@@ -48,6 +49,7 @@ before(async () => {
   logoutRoute = await import('../app/api/auth/logout/route');
   adminStatus = await import('../app/api/admin/status/route');
   adminUser = await import('../app/api/admin/user/route');
+  registry = await import('../lib/auth/session-registry');
   fixture = {
     version: 1,
     admin: { id: 'local-admin', username: 'admin', passwordHash: await store.hashPassword('synthetic-admin-password') },
@@ -55,14 +57,18 @@ before(async () => {
   };
 });
 beforeEach(async () => {
+  registry.sessionRegistry.revoke();
+  registry.sessionRegistry.configure(15);
   await Promise.all((await readdir(directory)).map((name) => rm(join(directory, name), { recursive: true, force: true })));
   await store.updateAuth(() => structuredClone(fixture));
 });
-after(async () => { await rm(directory, { recursive: true, force: true }); });
+after(async () => { registry.sessionRegistry.revoke(); await rm(directory, { recursive: true, force: true }); });
 
 function sessionFor(role: 'user' | 'admin'): SessionData {
   const account = role === 'admin' ? fixture.admin! : fixture.primary!;
-  return { authenticated: true, role, userId: account.id, authVersion: authorization.accountVersion(account) };
+  const session: SessionData = { authenticated: true, role, userId: account.id, authVersion: authorization.accountVersion(account) };
+  session.sessionId = registry.sessionRegistry.register(session);
+  return session;
 }
 
 async function requestContext<T>(session: SessionData, task: () => Promise<T>) {
@@ -124,7 +130,9 @@ test('admin login replaces a user cookie with only admin identity; logout destro
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, role: 'admin', next: '/admin' });
   const stored = await iron.unsealData<SessionData>(jar.get('tdb_session')!.value, { password: secret });
-  assert.deepEqual(stored, sessionFor('admin'));
+  assert.match(stored.sessionId!, /^[a-f0-9-]{36}$/);
+  assert.deepEqual(stored, { authenticated: true, role: 'admin', userId: fixture.admin!.id, authVersion: authorization.accountVersion(fixture.admin!), sessionId: stored.sessionId });
+  assert.equal(registry.sessionRegistry.isActive(stored), true);
   assert.equal(jar.get('tdb_session')?.httpOnly, true);
   const loggedOut = await requestContext(stored, () => logoutRoute.POST(new Request('http://localhost/api/auth/logout', { method: 'POST' })));
   assert.equal(loggedOut.result.status, 200);

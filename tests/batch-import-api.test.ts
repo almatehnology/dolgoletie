@@ -15,6 +15,8 @@ let prisma: typeof import('../lib/db')['prisma'];
 let store: typeof import('../lib/auth/store');
 let jobs: typeof import('../lib/batch-import/jobs')['jobs'];
 let iron: typeof import('iron-session');
+let sessionRegistry: typeof import('../lib/auth/session-registry').sessionRegistry;
+let activeFixtureId: string | undefined;
 let workStorage: typeof import('next/dist/server/app-render/work-async-storage.external');
 let requestStorage: typeof import('next/dist/server/app-render/work-unit-async-storage.external');
 let nextCookies: typeof import('next/dist/server/web/spec-extension/cookies');
@@ -36,6 +38,7 @@ before(async () => {
   Object.assign(globalThis, { AsyncLocalStorage });
   ({ prisma } = await import('../lib/db')); ({ jobs } = await import('../lib/batch-import/jobs'));
   store = await import('../lib/auth/store'); iron = await import('iron-session');
+  sessionRegistry = (await import('../lib/auth/session-registry')).sessionRegistry;
   workStorage = await import('next/dist/server/app-render/work-async-storage.external');
   requestStorage = await import('next/dist/server/app-render/work-unit-async-storage.external');
   nextCookies = await import('next/dist/server/web/spec-extension/cookies');
@@ -49,10 +52,20 @@ before(async () => {
 });
 beforeEach(async () => {
   jobs.clear(); await store.updateAuth(() => structuredClone(fixture));
+  userCookie = await seal({ authenticated: true, userId: 'primary', role: 'user', authVersion: 1 });
   await prisma.$transaction(async (tx) => { await tx.person.deleteMany(); await tx.importReceipt.deleteMany(); });
 });
-after(async () => { if (prisma) await prisma.$disconnect(); if (directory) await rm(directory, { recursive: true, force: true }); });
-async function seal(data: SessionData) { return iron.sealData(data, { password: secret }); }
+after(async () => { sessionRegistry?.revoke(); if (prisma) await prisma.$disconnect(); if (directory) await rm(directory, { recursive: true, force: true }); });
+async function seal(data: SessionData) {
+  if (data.authenticated) {
+    // Reseal the active identity to exercise cookie-bound draft isolation without
+    // inventing two simultaneous logins in the single-session server model.
+    const current = { ...data, sessionId: activeFixtureId };
+    data.sessionId = sessionRegistry.isActive(current) ? activeFixtureId : sessionRegistry.register(data);
+    activeFixtureId = data.sessionId;
+  }
+  return iron.sealData(data, { password: secret });
+}
 async function context<T>(cookie: string, task: () => Promise<T>): Promise<T> {
   const jar = new nextCookies.ResponseCookies(new Headers()); jar.set('tdb_session', cookie);
   const work = { isStaticGeneration: false, route: '/api/batch-import/test', page: '/api/batch-import/test/route' } as WorkStore;

@@ -46,6 +46,7 @@ test('legacy exports and reset respect unlocked roles, encryption and retained s
   const requestStorage = await import('next/dist/server/app-render/work-unit-async-storage.external');
   const { ResponseCookies } = await import('next/dist/server/web/spec-extension/cookies');
   const { sealData } = await import('iron-session');
+  const { sessionRegistry } = await import('../lib/auth/session-registry');
   const { NextRequest } = await import('next/server');
   const backupRoute = await import('../app/api/export/route');
   const personRoute = await import('../app/api/people/[id]/export/route');
@@ -55,7 +56,9 @@ test('legacy exports and reset respect unlocked roles, encryption and retained s
   async function sessionFor(role: 'user' | 'admin'): Promise<SessionData> {
     const auth = await readAuth();
     const account = role === 'user' ? auth.primary! : auth.admin!;
-    return { authenticated: true, role, userId: account.id, authVersion: accountVersion(account) };
+    const session: SessionData = { authenticated: true, role, userId: account.id, authVersion: accountVersion(account) };
+    session.sessionId = sessionRegistry.register(session);
+    return session;
   }
   async function context<T>(session: SessionData, task: () => Promise<T>) {
     const jar = new ResponseCookies(new Headers());
@@ -200,6 +203,7 @@ test('legacy exports and reset respect unlocked roles, encryption and retained s
       assert.ok(bundle.data.operations.some((op) => op.entityId === scan.id && op.after === null));
     });
   } finally {
+    sessionRegistry.revoke();
     await vault.vaultLock();
     await prisma.$disconnect();
     await rm(directory, { recursive: true, force: true });
