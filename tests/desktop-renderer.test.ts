@@ -133,4 +133,10 @@ test('sandboxed preload exposes only file capabilities and rejects oversized mes
   assert.equal(calls.length, 0);
   await exposed.selectFiles({ kind: 'tables', path: '/arbitrary/path' });
   assert.equal(JSON.stringify(calls[0].payload), '{"kind":"tables"}');
+  // Validate metadata at the real boundary without allocating a gigabyte.
+  const gigabyte = 1024 * 1024 * 1024;
+  await exposed.beginSave('archive.tdbbackup', gigabyte);
+  await exposed.readFileChunk(key, gigabyte);
+  assert.throws(() => exposed.beginSave('archive.tdbbackup', gigabyte + 1));
+  assert.throws(() => exposed.readFileChunk(key, gigabyte + 1));
 });

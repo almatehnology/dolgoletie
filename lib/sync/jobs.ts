@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Alias, Bundle, MergePlan } from './types';
 import type { AccessPreview } from './access';
 import { SyncError } from './validation';
+import { ARCHIVE_MAX_BYTES } from '@/lib/transfer-limits';
 
 export interface SyncJob {
   id: string; owner: string; bundle: Bundle; access: unknown; createdAt: number;
@@ -11,7 +12,7 @@ export interface SyncJob {
 }
 const globalJobs=globalThis as typeof globalThis & {tdbSyncJobs?:Map<string,SyncJob>};
 const jobs=globalJobs.tdbSyncJobs ??= new Map<string,SyncJob>();
-const TTL=30*60*1000, MAX_MEMORY=512*1024*1024;
+const TTL=30*60*1000, MAX_MEMORY=2*ARCHIVE_MAX_BYTES;
 export function clearJobAccess(access:unknown) {
   if(!access || typeof access!=='object') return;
   const value=access as {root?:Buffer;password?:string};

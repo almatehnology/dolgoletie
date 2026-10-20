@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { ENTITIES, type Entity, type Snapshot } from './types';
+import { ARCHIVE_MAX_BYTES } from '@/lib/transfer-limits';
 
 export class SyncError extends Error {
   constructor(message: string, public status = 400, public code = 'SYNC_INVALID') { super(message); }
 }
-export const LIMITS = { bundle: 256 * 1024 * 1024, expanded: 512 * 1024 * 1024, json: 32 * 1024 * 1024, attachment: 10 * 1024 * 1024, entries: 20000, operations: 100000, records: 100000 };
+export const LIMITS = { bundle: ARCHIVE_MAX_BYTES, expanded: ARCHIVE_MAX_BYTES, json: 32 * 1024 * 1024, attachment: 10 * 1024 * 1024, entries: 20000, operations: 100000, records: 100000 };
 export const idSchema = z.string().min(1).max(180).regex(/^[a-zA-Z0-9:_-]+$/);
 const scalar = z.union([z.string().max(1000000), z.number().finite(), z.boolean(), z.null()]);
 const snapshot = z.record(scalar).refine(v => idSchema.safeParse(v.id).success, 'Некорректный ID');

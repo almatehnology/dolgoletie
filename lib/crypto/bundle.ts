@@ -6,6 +6,7 @@ import { encryptBytes, decryptBytes, unwrapPassword } from './primitives';
 import { z } from 'zod';
 import { primaryAccountSchema } from '@/lib/auth/metadata-schema';
 import { vaultConfigSchema } from '@/lib/storage/vault-schema';
+import { ARCHIVE_MAX_BYTES } from '@/lib/transfer-limits';
 
 export type TransferAccess = { primary?: PrimaryAccount; vault: VaultConfig; root?: Buffer; password?: string };
 const MAGIC = Buffer.from('TDBSYNC1');
@@ -24,10 +25,12 @@ export async function encodeVaultBundle(payload: Buffer) {
   if (json.length > 262144) throw new Error('История доступа превышает размер заголовка');
   const size = Buffer.alloc(4); size.writeUInt32BE(json.length);
   const aad = Buffer.concat([MAGIC, size, json]);
-  return Buffer.concat([aad, vault.enabled ? encryptBytes(payload, vaultKey(), 'sync', aad) : payload]);
+  const encoded = Buffer.concat([aad, vault.enabled ? encryptBytes(payload, vaultKey(), 'sync', aad) : payload]);
+  if (encoded.length > ARCHIVE_MAX_BYTES) throw new Error('Размер файла не должен превышать 1 ГиБ.');
+  return encoded;
 }
 export async function decodeVaultBundle(input: Buffer, password?: string): Promise<{ payload: Buffer; access: TransferAccess | null }> {
-  if (input.length > 512 * 1024 * 1024) throw new Error('Файл превышает лимит');
+  if (input.length > ARCHIVE_MAX_BYTES) throw new Error('Размер файла не должен превышать 1 ГиБ.');
   if (!input.subarray(0, MAGIC.length).equals(MAGIC)) return { payload: input, access: null };
   if (input.length < 12) throw new Error('Повреждён заголовок файла');
   const size = input.readUInt32BE(8); if (size > 262144 || size < 1 || input.length < 12 + size) throw new Error('Повреждён заголовок файла');

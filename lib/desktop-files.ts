@@ -1,10 +1,11 @@
 'use client';
 
 import type { LocalFileKind, TravelDesktopBridge } from '../types/desktop';
+import { ARCHIVE_MAX_BYTES } from './transfer-limits';
 export type { LocalFileKind } from '../types/desktop';
 
 const CHUNK_BYTES = 256 * 1024;
-const SYNC_BYTES = 512 * 1024 * 1024;
+const SYNC_BYTES = ARCHIVE_MAX_BYTES;
 const ACCEPT = { tables: '.docx,.xlsx', sync: '.zip,.tdbsync' } as const;
 export interface LocalFileOptions { signal?: AbortSignal }
 

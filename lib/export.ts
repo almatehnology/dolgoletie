@@ -4,6 +4,7 @@ import { prisma } from './db';
 import { readScanFile } from './uploads';
 import { encodeVaultBundle } from './crypto/bundle';
 import { vaultEncryptionEnabled } from './storage/vault';
+import { ARCHIVE_MAX_BYTES } from './transfer-limits';
 
 export type ExportScope = 'full' | 'people' | 'events';
 
@@ -70,8 +71,15 @@ export async function buildExportZip(scope: ExportScope): Promise<{ stream: Read
 
   const archive = archiver('zip', { zlib: { level: 6 } });
   const chunks: Buffer[] = [];
+  let bytes = 0;
   const complete = new Promise<Buffer>((resolve, reject) => {
-    archive.on('data', (chunk: Buffer) => chunks.push(chunk));
+    archive.on('data', (chunk: Buffer) => {
+      bytes += chunk.length;
+      if (bytes > ARCHIVE_MAX_BYTES) {
+        archive.abort(); reject(new Error('Размер файла не должен превышать 1 ГиБ.')); return;
+      }
+      chunks.push(chunk);
+    });
     archive.once('end', () => resolve(Buffer.concat(chunks)));
     archive.once('error', reject);
     archive.once('warning', reject);

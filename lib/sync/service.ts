@@ -10,7 +10,8 @@ import { ensureJournalBaseline, getInstanceId, recordChange, withoutJournal } fr
 import { aliasResolver, buildMergePlan, recordKey } from './merge';
 import { captureState, delegate } from './state';
 import { ENTITIES, type Alias, type ApplyResult, type Decisions, type Entity, type RecordPlan, type Snapshot } from './types';
-import { idSchema, LIMITS, stable, SyncError, validateSnapshot } from './validation';
+import { idSchema, stable, SyncError, validateSnapshot } from './validation';
+import { ARCHIVE_MAX_BYTES } from '@/lib/transfer-limits';
 
 export async function exportSyncBundle() {
   return withAuthOperation(async()=>{
@@ -24,7 +25,7 @@ export async function exportSyncBundle() {
 }
 
 export async function previewSyncBundle(buffer: Buffer,owner: string,password?: string) {
-  if(buffer.length>LIMITS.bundle+16*1024*1024) throw new SyncError('Слишком большой файл обмена',413);
+  if(buffer.length>ARCHIVE_MAX_BYTES) throw new SyncError('Размер файла не должен превышать 1 ГиБ.',413);
   const {payload,access}=await decodeVaultBundle(buffer,password);
   try {
   const bundle=await parseBundle(payload);

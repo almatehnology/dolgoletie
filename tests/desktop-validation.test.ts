@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createRequire } from 'node:module';
+import { ARCHIVE_MAX_BYTES } from '../lib/transfer-limits';
 const require = createRequire(import.meta.url);
 const v = require('../desktop/validation.cjs');
 const { trustedRequest, TOKEN_HEADER } = require('../desktop/server-boundary.cjs');
@@ -34,6 +35,8 @@ test('IPC cannot supply file paths, unrecognised options or save extensions', ()
 });
 
 test('file and aggregate count/size limits are finite and format-specific', () => {
+  assert.equal(v.LIMITS.syncBytes, ARCHIVE_MAX_BYTES);
+  assert.equal(ARCHIVE_MAX_BYTES, 1024 * 1024 * 1024);
   v.validateSelectedFile('tables', 'x.docx', v.LIMITS.tableFileBytes);
   v.validateSelectedFile('sync', 'x.zip', v.LIMITS.syncBytes);
   for (const size of [-1, NaN, Infinity, 1.5, v.LIMITS.tableFileBytes + 1]) assert.throws(() => v.validateSelectedFile('tables', 'x.xlsx', size));

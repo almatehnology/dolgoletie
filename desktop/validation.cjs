@@ -5,7 +5,7 @@ const LIMITS = Object.freeze({
   tableFileBytes: 32 * 1024 * 1024,
   tableTotalBytes: 128 * 1024 * 1024,
   tableFiles: 32,
-  syncBytes: 512 * 1024 * 1024,
+  syncBytes: 1024 * 1024 * 1024,
   reportBytes: 64 * 1024 * 1024,
   idleMs: 2 * 60 * 1000,
   lifetimeMs: 30 * 60 * 1000,

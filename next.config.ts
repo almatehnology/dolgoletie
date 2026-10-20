@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { MIDDLEWARE_UPLOAD_MAX_BYTES } from './lib/transfer-limits';
 
 const nextConfig: NextConfig = {
   output: 'standalone',
@@ -9,6 +10,9 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: { '/**': ['./prisma/migrations/**/*', './assets/fonts/**/*', './node_modules/better-sqlite3-multiple-ciphers/prebuilds/**/*'] },
   outputFileTracingExcludes: { '/**': ['./.env', './.env.*', './data/**/*', './uploads/**/*', './prisma/data/**/*', './prisma/**/*.db', './prisma/**/*.db-*', './prisma/**/*.sqlite', './prisma/**/*.sqlite-*'] },
   experimental: {
+    // Middleware clones upload bodies before route-level size checks. Its
+    // default 10 MiB silently truncates valid backups and sync archives.
+    middlewareClientMaxBodySize: MIDDLEWARE_UPLOAD_MAX_BYTES,
     serverActions: {
       bodySizeLimit: '20mb',
     },
