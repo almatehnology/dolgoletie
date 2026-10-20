@@ -1,6 +1,7 @@
 import { test, expect, type BrowserContext, type Page, type TestInfo } from '@playwright/test';
 import { join } from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
 import ExcelJS from 'exceljs';
 import { createFixtures, syntheticSurname, ADMIN_PASSWORD, USERNAME, USER_PASSWORD } from './fixtures';
 
@@ -61,9 +62,9 @@ async function switchToAdmin() {
   await login('admin', ADMIN_PASSWORD);
 }
 
-async function switchToPrimary() {
+async function switchToPrimary(password = USER_PASSWORD) {
   await page.getByRole('button', { name: 'Вход пользователя', exact: true }).click();
-  await login(USERNAME, USER_PASSWORD);
+  await login(USERNAME, password);
 }
 
 async function forbiddenContent() {
@@ -296,14 +297,14 @@ test.describe.serial('Browser acceptance on synthetic isolated Next dev', () => 
     await page.getByRole('tab', { name: /Участники/ }).click();
     await page.getByRole('button', { name: 'Экспортировать участников (0)', exact: true }).click();
     await exportReport('xlsx', 'event-participants-empty', [], info);
+    await page.getByRole('button', { name: 'Добавить участников', exact: true }).click();
+    const add = page.getByRole('dialog');
     for (const query of [syntheticSurname(1), 'Документова']) {
-      await page.getByRole('button', { name: 'Добавить участника', exact: true }).click();
-      const add = page.getByRole('dialog');
       await add.getByLabel(/Поиск человека/).fill(query);
-      await add.getByRole('button', { name: new RegExp(query) }).click();
-      await add.getByRole('button', { name: 'Добавить', exact: true }).click();
-      await expect(add).not.toBeVisible();
+      await add.getByRole('checkbox', { name: new RegExp(query) }).check();
     }
+    await add.getByRole('button', { name: 'Добавить выбранных (2)', exact: true }).click();
+    await expect(add).not.toBeVisible();
     await expect(page.getByText('Участников: 2', { exact: true })).toBeVisible();
     await screenshot('10-event-participants', info);
     const names = [syntheticSurname(1), 'Документова'];
@@ -429,5 +430,112 @@ test.describe.serial('Browser acceptance on synthetic isolated Next dev', () => 
     await expect(page).toHaveURL(`${origin}/login`);
     expect((await json('/api/auth/status')).authenticated).toBe(false);
     expect((await context.request.get(`${origin}/api/scans/${scanId}`)).status()).toBe(401);
+  });
+  test('06 browser file upload round trips after password change, encrypted and plaintext', async () => {
+    const password = 'synthetic-updated-primary-password';
+    await json('/api/auth/login', 'POST', { username: USERNAME, password: USER_PASSWORD });
+    // Individually valid uploads make both exported files larger than Next's
+    // default 10 MiB middleware clone limit. Incompressible bytes matter here.
+    for (let index = 0; index < 2; index++) {
+      const response = await context.request.post(`${origin}/api/people/${documentPersonId}/scans`, {
+        headers: { Origin: origin },
+        multipart: { files: { name: `large-synthetic-${index}.png`, mimeType: 'image/png', buffer: Buffer.concat([originalScan, randomBytes(6 * 1024 * 1024)]) } },
+      });
+      expect(response.status(), await response.text()).toBe(201);
+    }
+    await json('/api/auth/login', 'POST', { username: 'admin', password: ADMIN_PASSWORD });
+    await json('/api/admin/user-password', 'POST', { proof: USER_PASSWORD, password, recovery: false });
+    await json('/api/auth/login', 'POST', { username: USERNAME, password });
+    await navigate('/data');
+    async function roundTrip(encrypted: boolean) {
+      const results = await page.evaluate(async ({ password, encrypted }) => {
+        const sync = await fetch('/api/sync/export');
+        if (!sync.ok) throw new Error(`Sync export ${sync.status}`);
+        const form = new FormData();
+        form.append('file', await sync.blob(), 'synthetic.tdbsync');
+        if (encrypted) form.append('password', password);
+        const preview = await fetch('/api/sync/preview', { method: 'POST', body: form });
+        const backup = await fetch('/api/export?scope=full');
+        if (!backup.ok) throw new Error(`Backup export ${backup.status}`);
+        const blob = await backup.blob();
+        if (blob.size <= 10 * 1024 * 1024) throw new Error('Regression fixture must exceed the old middleware limit');
+        const imports = [];
+        for (const [mode, dryRun] of [['merge', true], ['replace', true], ['merge', false], ['replace', false]] as const) {
+          const body = new FormData();
+          body.append('file', blob, encrypted ? 'synthetic.tdbbackup' : 'synthetic.zip');
+          body.append('mode', mode); body.append('dryRun', String(dryRun));
+          if (encrypted) body.append('password', password);
+          const response = await fetch('/api/import', { method: 'POST', body });
+          imports.push({ mode, dryRun, status: response.status, data: await response.json() });
+        }
+        return { sync: { status: preview.status, data: await preview.json() }, imports };
+      }, { password, encrypted });
+      expect(results.sync.status, JSON.stringify(results)).toBe(200);
+      for (const item of results.imports) expect(item.status, `${item.mode}: ${JSON.stringify(item.data)}`).toBe(200);
+      expect((await json('/api/people?pageSize=200')).total).toBe(54);
+      const document = await context.request.get(`${origin}/api/scans/${scanId}`);
+      expect(document.status()).toBe(200);
+      expect((await document.body()).equals(originalScan)).toBe(true);
+    }
+    await roundTrip(true);
+    await json('/api/auth/login', 'POST', { username: 'admin', password: ADMIN_PASSWORD });
+    await json('/api/admin/encryption', 'POST', { action: 'disable', proof: password });
+    await json('/api/auth/login', 'POST', { username: USERNAME, password });
+    await navigate('/data');
+    await roundTrip(false);
+  });
+  test('07 archive bulk restore and delete require confirmation on both tabs', async () => {
+    for (const entity of ['people', 'events'] as const) {
+      const items: { id: string; label: string }[] = [];
+      for (let index = 0; index < 2; index++) {
+        const label = `Архив QA ${entity} ${index}`;
+        const record = await json(`/api/${entity}`, 'POST', entity === 'people'
+          ? { lastName: label, firstName: 'Тест' }
+          : { title: label, startDate: '2026-12-20', endDate: '2026-12-21', location: 'Синтетическое место' });
+        items.push({ id: record.id, label: entity === 'people' ? `${label} Тест` : label });
+        await json(`/api/${entity}/${record.id}`, 'DELETE');
+      }
+      async function openArchive() {
+        await navigate('/archive');
+        if (entity === 'events') await page.getByRole('button', { name: 'Мероприятия', exact: true }).click();
+        for (const item of items) await page.getByRole('checkbox', { name: `Выбрать: ${item.label}`, exact: true }).check();
+        await expect(page.getByText('Выбрано: 2', { exact: true })).toBeVisible();
+      }
+      await openArchive();
+      page.once('dialog', dialog => dialog.dismiss());
+      await page.getByRole('button', { name: 'Восстановить выбранные', exact: true }).click();
+      for (const item of items) await expect(page.getByRole('checkbox', { name: `Выбрать: ${item.label}`, exact: true })).toBeChecked();
+      page.once('dialog', dialog => { expect(dialog.message()).toContain('(2)'); return dialog.accept(); });
+      const restored = page.waitForResponse(response => response.url().endsWith('/api/archive') && response.request().method() === 'POST');
+      await page.getByRole('button', { name: 'Восстановить выбранные', exact: true }).click();
+      expect((await restored).status()).toBe(200);
+      for (const item of items) {
+        expect((await json(`/api/${entity}/${item.id}`)).deletedAt).toBeNull();
+        await json(`/api/${entity}/${item.id}`, 'DELETE');
+      }
+      await openArchive();
+      page.once('dialog', dialog => dialog.dismiss());
+      await page.getByRole('button', { name: 'Удалить выбранные навсегда', exact: true }).click();
+      for (const item of items) await expect(page.getByRole('checkbox', { name: `Выбрать: ${item.label}`, exact: true })).toBeChecked();
+      page.once('dialog', dialog => { expect(dialog.message()).toContain('(2)'); return dialog.accept(); });
+      const deleted = page.waitForResponse(response => response.url().endsWith('/api/archive') && response.request().method() === 'POST');
+      await page.getByRole('button', { name: 'Удалить выбранные навсегда', exact: true }).click();
+      expect((await deleted).status()).toBe(200);
+      for (const item of items) expect((await context.request.get(`${origin}/api/${entity}/${item.id}`)).status()).toBe(404);
+    }
+  });
+  test('08 admin idle setting expires the browser session and requires fresh login', async () => {
+    await switchToAdmin();
+    await page.getByLabel('Минуты бездействия (1–1440)', { exact: true }).fill('1');
+    await page.getByRole('button', { name: 'Сохранить таймер', exact: true }).click();
+    await expect(page.getByText('Настройка сохранена.', { exact: true })).toBeVisible();
+    expect((await json('/api/admin/session-settings')).idleTimeoutMinutes).toBe(1);
+    await switchToPrimary('synthetic-updated-primary-password');
+    // Let the real server timer expire. Browser status polling must not keep it alive.
+    await expect(page).toHaveURL(`${origin}/login?expired=1`, { timeout: 80_000 });
+    expect((await json('/api/auth/status')).authenticated).toBe(false);
+    expect((await context.request.get(`${origin}/api/people`)).status()).toBe(401);
+    await login(USERNAME, 'synthetic-updated-primary-password');
+    expect((await json('/api/people?pageSize=200')).total).toBe(54);
   });
 });
