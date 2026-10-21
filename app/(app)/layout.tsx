@@ -5,6 +5,10 @@ import { SessionActivityMonitor } from '@/components/session-activity-monitor';
 import { requireUser } from '@/lib/auth/guards';
 import { redirect } from 'next/navigation';
 
+// Authentication is evaluated per request, never during an image build without
+// the installation's SESSION_SECRET, cookies, database or local accounts.
+export const dynamic = 'force-dynamic';
+
 export default async function AppLayout({ children }: { children: ReactNode }) {
   try { await requireUser(); }
   catch (error) {

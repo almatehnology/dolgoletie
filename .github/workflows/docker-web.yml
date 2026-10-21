@@ -2,6 +2,53 @@ name: Docker web runtime
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'components/**'
+      - 'lib/**'
+      - 'types/**'
+      - 'tests/**'
+      - 'e2e/**'
+      - 'assets/**'
+      - 'public/**'
+      - 'prisma/**'
+      - 'scripts/**'
+      - 'docker/**'
+      - 'desktop/resource-policy.cjs'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'next.config.ts'
+      - 'middleware.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - 'postcss.config.mjs'
+      - '.github/workflows/docker-web.yml'
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'components/**'
+      - 'lib/**'
+      - 'types/**'
+      - 'tests/**'
+      - 'e2e/**'
+      - 'assets/**'
+      - 'public/**'
+      - 'prisma/**'
+      - 'scripts/**'
+      - 'docker/**'
+      - 'desktop/resource-policy.cjs'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'next.config.ts'
+      - 'middleware.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - 'postcss.config.mjs'
+      - '.github/workflows/docker-web.yml'
 
 permissions:
   contents: read
